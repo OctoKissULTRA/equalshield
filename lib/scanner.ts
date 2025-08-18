@@ -72,7 +72,7 @@ export async function scanWebsite(url: string): Promise<ScanResult> {
 
   } catch (error) {
     console.error('Scanning error:', error);
-    throw new Error(`Failed to scan website: ${error.message}`);
+    throw new Error(`Failed to scan website: ${error instanceof Error ? error.message : 'Unknown error'}`);
   } finally {
     if (browser) {
       await browser.close();
