@@ -53,7 +53,7 @@ export async function scanWebsite(url: string): Promise<ScanResult> {
     });
 
     // Wait for page to be fully loaded
-    await page.waitForTimeout(2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Run axe-core accessibility tests
     const axe = new AxePuppeteer(page);
