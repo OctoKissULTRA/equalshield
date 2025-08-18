@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accessibility Violations Test Page</title>
+    <style>
+        /* Deliberately poor contrast */
+        .low-contrast { 
+            color: #aaaaaa; 
+            background-color: #ffffff; 
+            font-size: 14px; 
+        }
+        
+        .very-low-contrast { 
+            color: #dddddd; 
+            background-color: #ffffff; 
+            font-size: 12px; 
+        }
+        
+        /* Styling for interactive elements without proper focus */
+        .fake-button {
+            background: #007cba;
+            color: white;
+            padding: 10px 20px;
+            cursor: pointer;
+            display: inline-block;
+            margin: 5px;
+        }
+        
+        .fake-button:hover {
+            background: #005a8b;
+        }
+        
+        /* Small text that fails contrast */
+        .small-text {
+            font-size: 11px;
+            color: #666666;
+            background: #f0f0f0;
+        }
+        
+        /* Hidden but important content */
+        .sr-only {
+            position: absolute;
+            left: -9999px;
+        }
+        
+        /* Form styling */
+        .form-group {
+            margin: 15px 0;
+        }
+        
+        .error-text {
+            color: #ff0000;
+            font-size: 12px;
+        }
+        
+        /* Table without proper structure */
+        .data-table {
+            border-collapse: collapse;
+        }
+        
+        .data-table td {
+            border: 1px solid #ccc;
+            padding: 8px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <!-- Missing main landmark -->
+        <h1>Accessibility Violations Test Page</h1>
+        
+        <!-- Logo without alt text -->
+        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjQwIiB2aWV3Qm94PSIwIDAgMTAwIDQwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjMDA3Y2JhIi8+PHRleHQgeD0iNTAiIHk9IjI1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSJ3aGl0ZSI+TG9nbzwvdGV4dD48L3N2Zz4=" />
+        
+        <!-- Navigation without proper structure -->
+        <div>
+            <a href="#section1">Section 1</a>
+            <a href="#section2">Section 2</a>
+            <a href="#section3">Section 3</a>
+        </div>
+    </header>
+
+    <!-- Missing main landmark -->
+    <div>
+        <!-- Skipped heading level (h1 to h3) -->
+        <h3>Content Section</h3>
+        
+        <!-- Image without alt text -->
+        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNkZGQiLz48dGV4dCB4PSIxNTAiIHk9IjEwNSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SW1hZ2U8L3RleHQ+PC9zdmc+" width="300" height="200" />
+        
+        <!-- Low contrast text -->
+        <p class="low-contrast">This paragraph has insufficient color contrast and will be difficult to read for users with low vision. The contrast ratio is approximately 2.32:1, which fails WCAG AA standards.</p>
+        
+        <!-- Very low contrast text -->
+        <p class="very-low-contrast">This text has even worse contrast and smaller font size, making it nearly impossible to read for many users.</p>
+        
+        <!-- Vague link text -->
+        <p>For more information about our services, <a href="/services">click here</a>.</p>
+        <p>To learn about pricing, <a href="/pricing">read more</a>.</p>
+        <p>Check out our blog for updates: <a href="/blog">here</a>.</p>
+        
+        <!-- Empty link -->
+        <a href="/empty"></a>
+        
+        <!-- Interactive elements without keyboard access -->
+        <h4>Interactive Elements</h4>
+        <div class="fake-button" onclick="alert('Button 1 clicked')">Fake Button 1</div>
+        <span class="fake-button" onclick="purchaseItem()" style="cursor: pointer">Buy Now</span>
+        <div onclick="showDetails()" tabindex="-1">Click for details (not keyboard accessible)</div>
+        
+        <!-- Form with accessibility issues -->
+        <h4>Contact Form</h4>
+        <form>
+            <div class="form-group">
+                <!-- Input without label -->
+                <input type="text" placeholder="Enter your name" required>
+            </div>
+            
+            <div class="form-group">
+                <!-- Input with placeholder only -->
+                <input type="email" placeholder="your.email@example.com" required>
+                <div class="error-text">Please enter a valid email address</div>
+            </div>
+            
+            <div class="form-group">
+                <!-- Label not associated with input -->
+                <label>Phone Number</label>
+                <input type="tel" id="different-id" placeholder="(555) 123-4567">
+            </div>
+            
+            <div class="form-group">
+                <!-- Proper label association -->
+                <label for="message">Message:</label>
+                <textarea id="message" placeholder="Enter your message"></textarea>
+            </div>
+            
+            <!-- Submit button with no text -->
+            <button type="submit" aria-label=""></button>
+            
+            <!-- Submit with icon only -->
+            <input type="submit" value="">
+        </form>
+        
+        <!-- Data table without headers -->
+        <h4>Sales Data</h4>
+        <table class="data-table">
+            <tr>
+                <td>Product A</td>
+                <td>$1,250</td>
+                <td>15%</td>
+            </tr>
+            <tr>
+                <td>Product B</td>
+                <td>$890</td>
+                <td>8%</td>
+            </tr>
+            <tr>
+                <td>Product C</td>
+                <td>$2,100</td>
+                <td>22%</td>
+            </tr>
+        </table>
+        
+        <!-- List without proper structure -->
+        <h4>Features</h4>
+        <div>Fast performance</div>
+        <div>Easy to use</div>
+        <div>24/7 support</div>
+        <div>Money back guarantee</div>
+        
+        <!-- Media without captions -->
+        <h4>Promotional Video</h4>
+        <video width="320" height="240" controls>
+            <source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAs1tZGF0" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        
+        <!-- Audio without transcript -->
+        <h4>Podcast Episode</h4>
+        <audio controls>
+            <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj" type="audio/wav">
+            Your browser does not support the audio element.
+        </audio>
+        
+        <!-- Content that relies only on color -->
+        <h4>Status Indicators</h4>
+        <p>Items in <span style="color: red;">red</span> are urgent, items in <span style="color: green;">green</span> are complete.</p>
+        
+        <!-- Small contrast-failing text -->
+        <p class="small-text">This fine print text fails contrast requirements and is too small to read comfortably.</p>
+        
+        <!-- Auto-playing content (simulated) -->
+        <h4>Announcements</h4>
+        <div id="auto-content">
+            <marquee>This scrolling text can cause seizures and is not accessible!</marquee>
+        </div>
+        
+        <!-- Motion without user control -->
+        <style>
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            .spinning {
+                animation: spin 2s linear infinite;
+                width: 50px;
+                height: 50px;
+                background: #007cba;
+                display: inline-block;
+            }
+        </style>
+        <div class="spinning"></div>
+        <p>This spinning element cannot be paused by the user.</p>
+        
+        <!-- Nested interactive elements -->
+        <div onclick="outerClick()">
+            <button onclick="innerClick(); event.stopPropagation();">
+                <a href="/link">Link inside button</a>
+            </button>
+        </div>
+        
+        <!-- Missing language attribute on foreign text -->
+        <p>Welcome! Bienvenue! ¡Bienvenido! Willkommen!</p>
+        
+        <!-- Time-sensitive content without warning -->
+        <div>
+            <p>This session will expire in <span id="countdown">05:00</span></p>
+            <script>
+                let timeLeft = 300;
+                setInterval(() => {
+                    timeLeft--;
+                    const mins = Math.floor(timeLeft / 60);
+                    const secs = timeLeft % 60;
+                    document.getElementById('countdown').textContent = 
+                        `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                }, 1000);
+            </script>
+        </div>
+        
+        <!-- Form with time limit -->
+        <h4>Quick Survey (30 seconds)</h4>
+        <form>
+            <p>How satisfied are you with our service?</p>
+            <input type="radio" name="satisfaction" value="1"> Very Dissatisfied
+            <input type="radio" name="satisfaction" value="2"> Dissatisfied  
+            <input type="radio" name="satisfaction" value="3"> Neutral
+            <input type="radio" name="satisfaction" value="4"> Satisfied
+            <input type="radio" name="satisfaction" value="5"> Very Satisfied
+        </form>
+    </div>
+
+    <!-- Footer without landmark -->
+    <div>
+        <p>&copy; 2024 Test Company. All rights reserved.</p>
+        
+        <!-- Social media links with icon fonts (no alt text equivalent) -->
+        <div>
+            <a href="/facebook" style="font-family: 'Font Awesome'; font-size: 24px;">📘</a>
+            <a href="/twitter" style="font-family: 'Font Awesome'; font-size: 24px;">🐦</a>
+            <a href="/linkedin" style="font-family: 'Font Awesome'; font-size: 24px;">💼</a>
+        </div>
+    </div>
+
+    <script>
+        // Functions referenced by onclick handlers
+        function purchaseItem() {
+            alert('Purchase initiated');
+        }
+        
+        function showDetails() {
+            alert('Details shown');
+        }
+        
+        function outerClick() {
+            console.log('Outer clicked');
+        }
+        
+        function innerClick() {
+            console.log('Inner clicked');
+        }
+        
+        // Simulate auto-updating content
+        setInterval(() => {
+            const autoContent = document.getElementById('auto-content');
+            if (autoContent) {
+                autoContent.innerHTML += '<p>New update: ' + new Date().toLocaleTimeString() + '</p>';
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
