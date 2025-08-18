@@ -5,8 +5,8 @@ import { getUser, getTeamForUser } from '@/lib/db/queries';
 import { SWRConfig } from 'swr';
 
 export const metadata: Metadata = {
-  title: 'Next.js SaaS Starter',
-  description: 'Get started quickly with Next.js, Postgres, and Stripe.'
+  title: 'EqualShield - Enterprise ADA Compliance & Accessibility Solutions',
+  description: 'Comprehensive digital accessibility compliance platform with WCAG 2.1 AA scanning, VPAT documentation, and expert remediation support for Fortune 500 companies.'
 };
 
 export const viewport: Viewport = {

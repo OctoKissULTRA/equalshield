@@ -11,6 +11,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@axe-core/puppeteer": "^4.10.2",
     "@tailwindcss/postcss": "4.1.7",
     "@types/node": "^22.15.18",
     "@types/react": "19.1.4",
@@ -22,11 +23,14 @@
     "dotenv": "^16.5.0",
     "drizzle-kit": "^0.31.1",
     "drizzle-orm": "^0.43.1",
+    "html2canvas": "^1.4.1",
     "jose": "^6.0.11",
+    "jspdf": "^2.5.2",
     "lucide-react": "^0.511.0",
     "next": "15.4.0-canary.47",
     "postcss": "^8.5.3",
     "postgres": "^3.4.5",
+    "puppeteer": "^23.8.0",
     "radix-ui": "^1.4.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",

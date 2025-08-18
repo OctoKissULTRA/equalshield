@@ -1,28 +1,35 @@
-# Next.js SaaS Starter
+# EqualShield - Enterprise ADA Compliance Platform
 
-This is a starter template for building a SaaS application using **Next.js** with support for authentication, Stripe integration for payments, and a dashboard for logged-in users.
+Professional accessibility compliance platform providing comprehensive WCAG 2.1 AA scanning, VPAT documentation generation, and expert remediation support for Fortune 500 companies, government agencies, and educational institutions.
 
-**Demo: [https://next-saas-start.vercel.app/](https://next-saas-start.vercel.app/)**
+## Key Features
 
-## Features
+### 🔍 **Professional Accessibility Scanning**
+- Real WCAG 2.1 Level AA compliance testing using Puppeteer + axe-core
+- Automated scanning against Section 508, ADA Title III, and EN 301 549 standards
+- Comprehensive POUR principles analysis (Perceivable, Operable, Understandable, Robust)
+- Detailed violation reporting with WCAG criterion references
 
-- Marketing landing page (`/`) with animated Terminal element
-- Pricing page (`/pricing`) which connects to Stripe Checkout
-- Dashboard pages with CRUD operations on users/teams
-- Basic RBAC with Owner and Member roles
-- Subscription management with Stripe Customer Portal
-- Email/password authentication with JWTs stored to cookies
-- Global middleware to protect logged-in routes
-- Local middleware to protect Server Actions or validate Zod schemas
-- Activity logging system for any user events
+### 📋 **VPAT Documentation Generation**
+- Automated VPAT® 2.5 documentation for federal procurement
+- Section 508 conformance reports
+- EN 301 549 international compliance documentation
+- Legal compliance documentation for audit trails
 
-## Tech Stack
+### 🏢 **Enterprise-Grade Platform**
+- Professional landing page with regulatory framework positioning
+- Three-tier pricing: Professional ($997/mo), Enterprise ($2,497/mo), Global (Custom)
+- Enterprise dashboard with compliance monitoring
+- Expert remediation guidance and implementation support
 
-- **Framework**: [Next.js](https://nextjs.org/)
-- **Database**: [Postgres](https://www.postgresql.org/)
-- **ORM**: [Drizzle](https://orm.drizzle.team/)
-- **Payments**: [Stripe](https://stripe.com/)
-- **UI Library**: [shadcn/ui](https://ui.shadcn.com/)
+## Technology Stack
+
+- **Framework**: [Next.js 15](https://nextjs.org/) with TypeScript
+- **Database**: [PostgreSQL](https://www.postgresql.org/) with [Drizzle ORM](https://orm.drizzle.team/)
+- **Scanning Engine**: [Puppeteer](https://pptr.dev/) + [@axe-core/puppeteer](https://github.com/dequelabs/axe-core-npm)
+- **Payments**: [Stripe](https://stripe.com/) with enterprise subscription management
+- **UI Framework**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
+- **Authentication**: JWT-based with secure session management
 
 ## Getting Started
 
