@@ -16,18 +16,20 @@ interface LLMAnalysisResult {
 }
 
 export class LLMComplianceAnalyzer {
-  private claude: Anthropic | null = null;
   private openai: OpenAI | null = null;
+  private claude: Anthropic | null = null;
   
   constructor() {
-    if (process.env.CLAUDE_API_KEY) {
-      this.claude = new Anthropic({ 
-        apiKey: process.env.CLAUDE_API_KEY 
-      });
-    }
+    // Primary: OpenAI
     if (process.env.OPENAI_API_KEY) {
       this.openai = new OpenAI({ 
         apiKey: process.env.OPENAI_API_KEY 
+      });
+    }
+    // Fallback: Claude (optional)
+    if (process.env.CLAUDE_API_KEY) {
+      this.claude = new Anthropic({ 
+        apiKey: process.env.CLAUDE_API_KEY 
       });
     }
   }
@@ -88,7 +90,19 @@ Format as JSON with structure:
     try {
       let response: string;
       
-      if (this.claude) {
+      if (this.openai) {
+        const completion = await this.openai.chat.completions.create({
+          model: 'gpt-5',
+          messages: [{ 
+            role: 'user', 
+            content: prompt 
+          }],
+          response_format: { type: 'json_object' },
+          temperature: 0.3,
+          max_tokens: 4000
+        });
+        response = completion.choices[0].message.content || '';
+      } else if (this.claude) {
         const message = await this.claude.messages.create({
           model: 'claude-3-sonnet-20240229',
           max_tokens: 4000,
@@ -98,16 +112,6 @@ Format as JSON with structure:
           }]
         });
         response = message.content[0].type === 'text' ? message.content[0].text : '';
-      } else if (this.openai) {
-        const completion = await this.openai.chat.completions.create({
-          model: 'gpt-4-turbo-preview',
-          messages: [{ 
-            role: 'user', 
-            content: prompt 
-          }],
-          response_format: { type: 'json_object' }
-        });
-        response = completion.choices[0].message.content || '';
       } else {
         // Fallback to rule-based analysis if no LLM available
         return this.fallbackAnalysis(elements, existingViolations);
@@ -173,20 +177,22 @@ Return JSON:
     try {
       let response: string;
       
-      if (this.claude) {
+      if (this.openai) {
+        const completion = await this.openai.chat.completions.create({
+          model: 'gpt-5',
+          messages: [{ role: 'user', content: prompt }],
+          response_format: { type: 'json_object' },
+          temperature: 0.3,
+          max_tokens: 3000
+        });
+        response = completion.choices[0].message.content || '';
+      } else if (this.claude) {
         const message = await this.claude.messages.create({
           model: 'claude-3-sonnet-20240229',
           max_tokens: 3000,
           messages: [{ role: 'user', content: prompt }]
         });
         response = message.content[0].type === 'text' ? message.content[0].text : '';
-      } else if (this.openai) {
-        const completion = await this.openai.chat.completions.create({
-          model: 'gpt-4-turbo-preview',
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' }
-        });
-        response = completion.choices[0].message.content || '';
       } else {
         return this.calculateRiskWithoutLLM(violations, companyInfo);
       }
@@ -232,20 +238,22 @@ Format as:
     try {
       let response: string;
       
-      if (this.claude) {
+      if (this.openai) {
+        const completion = await this.openai.chat.completions.create({
+          model: 'gpt-5',
+          messages: [{ role: 'user', content: prompt }],
+          response_format: { type: 'json_object' },
+          temperature: 0.2,
+          max_tokens: 2000
+        });
+        response = completion.choices[0].message.content || '';
+      } else if (this.claude) {
         const message = await this.claude.messages.create({
           model: 'claude-3-sonnet-20240229',
           max_tokens: 2000,
           messages: [{ role: 'user', content: prompt }]
         });
         response = message.content[0].type === 'text' ? message.content[0].text : '';
-      } else if (this.openai) {
-        const completion = await this.openai.chat.completions.create({
-          model: 'gpt-4-turbo-preview',
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' }
-        });
-        response = completion.choices[0].message.content || '';
       } else {
         return this.generateBasicFix(violation, framework);
       }
