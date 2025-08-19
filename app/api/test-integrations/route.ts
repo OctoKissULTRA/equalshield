@@ -4,7 +4,11 @@ import Stripe from 'stripe';
 import OpenAI from 'openai';
 
 export async function GET() {
-  const results = {
+  const results: {
+    supabase: { status: string; data: any; error: string | null };
+    stripe: { status: string; data: any; error: string | null };
+    openai: { status: string; data: any; error: string | null };
+  } = {
     supabase: { status: 'not_tested', data: null, error: null },
     stripe: { status: 'not_tested', data: null, error: null },
     openai: { status: 'not_tested', data: null, error: null }
