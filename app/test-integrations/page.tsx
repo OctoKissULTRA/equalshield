@@ -141,7 +141,7 @@ export default function TestIntegrationsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   {getStatusIcon(results.openai.status)}
-                  OpenAI GPT-4
+                  OpenAI GPT-5
                 </CardTitle>
               </CardHeader>
               <CardContent>
