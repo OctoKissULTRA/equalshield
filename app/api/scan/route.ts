@@ -158,7 +158,7 @@ async function processScansInBackground(scanId: number, url: string, tier: strin
         fixCode: violation.fixCode || '',
         fixEffort: violation.fixEffort || 'moderate',
         estimatedFixTime: violation.estimatedFixTime || '30 minutes',
-        aiConfidence: violation.aiConfidence || 0.8
+        aiConfidence: (violation.aiConfidence || 0.8).toString()
       }));
 
       await db.insert(violations).values(violationData);
