@@ -109,7 +109,7 @@ export async function GET() {
             content: "Just respond with 'GPT-5 API test successful' - this is a connection test"
           }
         ],
-        max_tokens: 20
+        max_completion_tokens: 20
       });
       
       results.openai = {
