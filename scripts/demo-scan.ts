@@ -126,7 +126,7 @@ async function runDemo() {
         }
         
       } catch (llmError) {
-        console.log('⚠️  LLM analysis failed:', llmError.message);
+        console.log('⚠️  LLM analysis failed:', llmError instanceof Error ? llmError.message : String(llmError));
         console.log('   (This is expected without valid API keys)\n');
       }
     } else {
