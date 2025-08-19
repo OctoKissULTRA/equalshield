@@ -460,7 +460,7 @@ export class WCAGRules {
     const highRiskRules = ['1.1.1', '2.1.1', '1.4.3', '4.1.2'];
     const baseRisk = highRiskRules.includes(ruleId) ? 0.4 : 0.2;
     
-    const impactMultiplier = {
+    const impactMultiplier: Record<string, number> = {
       'critical': 2.5,
       'serious': 2.0,
       'moderate': 1.5,
