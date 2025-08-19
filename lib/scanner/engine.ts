@@ -1,6 +1,25 @@
 import { chromium, Browser, Page } from 'playwright';
 import OpenAI from 'openai';
 
+async function launchBrowser(): Promise<Browser> {
+  const ws = process.env.BROWSERLESS_WS_URL; // wss://chrome.browserless.io/playwright?token=...
+  if (ws) {
+    // Remote browser (stable in serverless)
+    console.log('🔗 Connecting to remote Browserless...');
+    return await chromium.connectOverCDP(ws);
+  }
+  // Local dev
+  console.log('🚀 Launching local Chromium...');
+  return await chromium.launch({
+    headless: true,
+    args: [
+      '--disable-blink-features=AutomationControlled',
+      '--disable-dev-shm-usage',
+      '--no-sandbox'
+    ]
+  });
+}
+
 export interface ScanConfig {
   url: string;
   depth: 'quick' | 'standard' | 'deep';
@@ -88,15 +107,8 @@ export class ComplianceScanner {
 
   async scanWebsite(config: ScanConfig): Promise<ScanResult> {
     try {
-      // Launch browser with stealth mode
-      this.browser = await chromium.launch({
-        headless: true,
-        args: [
-          '--disable-blink-features=AutomationControlled',
-          '--disable-dev-shm-usage',
-          '--no-sandbox'
-        ]
-      });
+      // Launch browser (local or remote)
+      this.browser = await launchBrowser();
 
       const page = await this.browser.newPage();
       
@@ -160,44 +172,80 @@ export class ComplianceScanner {
   private async runCustomWCAGChecks(page: Page, url: string): Promise<Violation[]> {
     return await page.evaluate((pageUrl) => {
       const violations: any[] = [];
-      
-      // Check images without alt text (WCAG 1.1.1)
-      document.querySelectorAll('img:not([alt]), img[alt=""]').forEach((img, index) => {
-        violations.push({
-          wcagCriterion: '1.1.1',
-          severity: 'critical',
-          elementType: 'image',
-          elementSelector: img.id ? `#${img.id}` : `img:nth-of-type(${index + 1})`,
-          elementHtml: img.outerHTML.substring(0, 200),
-          pageUrl: pageUrl,
-          userImpact: 'Screen reader users cannot understand image content',
-          legalRiskLevel: 'high',
-          fixDescription: 'Add descriptive alt text to image',
-          fixCode: `<img alt="[Describe image content]" ${img.outerHTML.slice(4)}`,
-          fixEffort: 'trivial',
-          estimatedFixTime: '2 minutes',
-          aiConfidence: 0.95
-        });
+
+      const isHidden = (el: Element) => {
+        const s = window.getComputedStyle(el as HTMLElement);
+        return s.display === 'none' || s.visibility === 'hidden' || (el as HTMLElement).offsetParent === null;
+      };
+
+      // 1) Images: Enhanced alt rules with decorative & aria-hidden allowances
+      document.querySelectorAll('img, [role="img"], svg').forEach((el, idx) => {
+        if (isHidden(el)) return;
+        
+        const img = el as HTMLElement;
+        const ariaHidden = img.getAttribute('aria-hidden') === 'true';
+        const role = img.getAttribute('role');
+        const alt = (img as HTMLImageElement).alt ?? null;
+
+        const decorative = 
+          role === 'presentation' ||
+          alt === '' ||
+          ariaHidden;
+
+        if (!decorative) {
+          const hasName = 
+            !!alt ||
+            !!img.getAttribute('aria-label') ||
+            !!img.getAttribute('aria-labelledby') ||
+            (img.tagName.toLowerCase() === 'svg' && !!img.querySelector('title'));
+
+          if (!hasName) {
+            violations.push({
+              wcagCriterion: '1.1.1',
+              severity: 'critical',
+              elementType: 'image',
+              elementSelector: img.id ? `#${img.id}` : `:nth-image(${idx+1})`,
+              elementHtml: img.outerHTML.slice(0, 200),
+              pageUrl: pageUrl,
+              userImpact: 'Screen reader users cannot access image information',
+              legalRiskLevel: 'high',
+              fixDescription: 'Provide a text alternative (alt or accessible name).',
+              fixCode: img.tagName === 'IMG'
+                ? `<img alt="[Describe image]" ${img.outerHTML.slice(4)}`
+                : `<svg role="img"><title>[Describe graphic]</title>…</svg>`,
+              fixEffort: 'trivial',
+              estimatedFixTime: '2 minutes',
+              aiConfidence: 0.95
+            });
+          }
+        }
       });
 
-      // Check form inputs without labels (WCAG 3.3.2)
-      document.querySelectorAll('input:not([aria-label]):not([aria-labelledby]), textarea:not([aria-label]):not([aria-labelledby])').forEach((input) => {
-        const id = input.id;
-        const hasLabel = id && document.querySelector(`label[for="${id}"]`);
-        
-        if (!hasLabel && input.type !== 'hidden' && input.type !== 'submit') {
+      // 2) Form labels: ignore hidden/aria-hidden, handle wrapper <label>
+      document.querySelectorAll('input, select, textarea').forEach((inputEl) => {
+        const el = inputEl as HTMLElement;
+        if (isHidden(el) || el.getAttribute('aria-hidden') === 'true' || (el as HTMLInputElement).type === 'hidden') return;
+
+        const id = el.id;
+        const hasExplicit = !!(id && document.querySelector(`label[for="${id}"]`));
+        const wrapped = !!el.closest('label');
+        const hasAria = !!el.getAttribute('aria-label') || !!el.getAttribute('aria-labelledby');
+
+        if (!hasExplicit && !wrapped && !hasAria) {
           violations.push({
             wcagCriterion: '3.3.2',
             severity: 'serious',
             elementType: 'form',
-            elementSelector: input.id ? `#${input.id}` : `${input.tagName.toLowerCase()}[type="${input.type}"]`,
-            elementHtml: input.outerHTML.substring(0, 200),
+            elementSelector: id ? `#${id}` : el.tagName.toLowerCase(),
+            elementHtml: el.outerHTML.slice(0, 200),
             pageUrl: pageUrl,
-            userImpact: 'Users don\'t know what information to enter',
-            businessImpact: 'Reduced form completion rates',
+            userImpact: 'Users cannot determine purpose of the input field',
+            businessImpact: 'Reduced form completion rates, legal compliance risk',
             legalRiskLevel: 'high',
-            fixDescription: 'Add label for form input',
-            fixCode: `<label for="${id || 'input-id'}">[Label text]</label>\\n${input.outerHTML}`,
+            fixDescription: 'Associate a visible label or aria-label/aria-labelledby.',
+            fixCode: id
+              ? `<label for="${id}">[Label]</label>\\n${el.outerHTML}`
+              : `<label>[Label]\\n  ${el.outerHTML}\\n</label>`,
             fixEffort: 'easy',
             estimatedFixTime: '5 minutes',
             aiConfidence: 0.90
@@ -205,18 +253,57 @@ export class ComplianceScanner {
         }
       });
 
-      // Check buttons without accessible names (WCAG 4.1.2)
+      // 3) Keyboard: non-native interactive with missing key handlers
+      document.querySelectorAll('[role="button"], .button, [onclick]').forEach((el) => {
+        if (isHidden(el)) return;
+        
+        const he = el as HTMLElement;
+        const tag = he.tagName.toLowerCase();
+        const isNative = tag === 'button' || (tag === 'a' && (he as HTMLAnchorElement).href);
+
+        if (!isNative) {
+          const tabbable = he.getAttribute('tabindex') !== '-1';
+          const hasKeyHandlers = !!(
+            he.getAttribute('onkeydown') || 
+            he.getAttribute('onkeypress') || 
+            he.getAttribute('onkeyup')
+          );
+
+          if (!tabbable || !hasKeyHandlers) {
+            violations.push({
+              wcagCriterion: '2.1.1',
+              severity: 'critical',
+              elementType: 'interactive',
+              elementSelector: he.id ? `#${he.id}` : (he.className || tag),
+              elementHtml: he.outerHTML.slice(0, 200),
+              pageUrl: pageUrl,
+              userImpact: 'Keyboard-only users cannot activate this control',
+              businessImpact: 'Users with motor disabilities excluded from key functionality',
+              legalRiskLevel: 'high',
+              fixDescription: 'Use a <button> or add tabindex="0" and Enter/Space key handlers.',
+              fixCode: `<button>${he.textContent?.trim() || 'Action'}</button>`,
+              fixEffort: 'easy',
+              estimatedFixTime: '10 minutes',
+              aiConfidence: 0.88
+            });
+          }
+        }
+      });
+
+      // 4) Buttons without accessible names
       document.querySelectorAll('button:not([aria-label]):not([aria-labelledby])').forEach((button) => {
+        if (isHidden(button)) return;
+        
         if (!button.textContent?.trim()) {
           violations.push({
             wcagCriterion: '4.1.2',
             severity: 'critical',
             elementType: 'button',
-            elementSelector: button.id ? `#${button.id}` : button.className ? `.${button.className.split(' ')[0]}` : 'button',
+            elementSelector: button.id ? `#${button.id}` : (button.className ? `.${button.className.split(' ')[0]}` : 'button'),
             elementHtml: button.outerHTML.substring(0, 200),
             pageUrl: pageUrl,
             userImpact: 'Screen reader users don\'t know button purpose',
-            businessImpact: 'Users cannot complete important actions',
+            businessImpact: 'Critical actions inaccessible to screen reader users',
             legalRiskLevel: 'high',
             fixDescription: 'Add accessible name to button',
             fixCode: `<button aria-label="[Describe button action]">${button.innerHTML}</button>`,
@@ -227,8 +314,10 @@ export class ComplianceScanner {
         }
       });
 
-      // Check links without accessible names (WCAG 2.4.4)
+      // 5) Links without accessible names  
       document.querySelectorAll('a[href]:not([aria-label]):not([aria-labelledby])').forEach((link) => {
+        if (isHidden(link)) return;
+        
         if (!link.textContent?.trim()) {
           violations.push({
             wcagCriterion: '2.4.4',
@@ -238,10 +327,10 @@ export class ComplianceScanner {
             elementHtml: link.outerHTML.substring(0, 200),
             pageUrl: pageUrl,
             userImpact: 'Screen reader users don\'t know link destination',
-            businessImpact: 'Users cannot navigate effectively',
+            businessImpact: 'Navigation inaccessible, users cannot complete user journeys',
             legalRiskLevel: 'medium',
             fixDescription: 'Add descriptive text to link',
-            fixCode: `<a href="${link.href}">[Descriptive link text]</a>`,
+            fixCode: `<a href="${(link as HTMLAnchorElement).href}">[Descriptive link text]</a>`,
             fixEffort: 'easy',
             estimatedFixTime: '3 minutes',
             aiConfidence: 0.88
@@ -295,60 +384,71 @@ export class ComplianceScanner {
     return await page.evaluate((pageUrl) => {
       const violations: any[] = [];
       
-      const getContrast = (color1: string, color2: string): number => {
-        const getLuminance = (color: string) => {
-          // Simple RGB extraction and luminance calculation
-          const rgb = color.match(/\\d+/g)?.map(Number) || [0, 0, 0];
-          const [r, g, b] = rgb.map(val => {
-            val = val / 255;
-            return val <= 0.03928 
-              ? val / 12.92 
-              : Math.pow((val + 0.055) / 1.055, 2.4);
-          });
-          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        };
-        
-        const l1 = getLuminance(color1);
-        const l2 = getLuminance(color2);
-        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+      const relLum = (c: string) => {
+        const m = c.match(/\\d+/g)?.map(Number) || [0,0,0];
+        const [r,g,b] = m.map(v => {
+          v /= 255;
+          return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4);
+        });
+        return 0.2126*r + 0.7152*g + 0.0722*b;
+      };
+      
+      const contrast = (fg: string, bg: string) => {
+        const L1 = relLum(fg), L2 = relLum(bg);
+        const [hi, lo] = [Math.max(L1, L2), Math.min(L1, L2)];
+        return (hi + 0.05) / (lo + 0.05);
+      };
+      
+      const getEffectiveBG = (el: HTMLElement): string => {
+        let node: HTMLElement | null = el;
+        while (node) {
+          const bg = getComputedStyle(node).backgroundColor;
+          if (bg && !bg.startsWith('rgba(0, 0, 0, 0)')) return bg;
+          node = node.parentElement;
+        }
+        return 'rgb(255, 255, 255)';
       };
 
-      // Check text contrast
-      const textElements = document.querySelectorAll('p, span, div, a, button, h1, h2, h3, h4, h5, h6, li, td, th');
-      
-      for (let i = 0; i < Math.min(textElements.length, 50); i++) {
-        const el = textElements[i] as HTMLElement;
-        const styles = window.getComputedStyle(el);
-        const color = styles.color;
-        const bgColor = styles.backgroundColor;
+      // Check text contrast with real background calculation
+      document.querySelectorAll('p,span,div,a,button,h1,h2,h3,h4,h5,h6,li,td,th').forEach((el, idx) => {
+        if (idx > 50) return; // Limit for performance
         
-        if (el.textContent?.trim() && color && bgColor && bgColor !== 'rgba(0, 0, 0, 0)') {
-          const contrast = getContrast(color, bgColor);
-          const fontSize = parseFloat(styles.fontSize);
-          const isLarge = fontSize >= 18 || (fontSize >= 14 && styles.fontWeight === 'bold');
-          const requiredContrast = isLarge ? 3 : 4.5;
-          
-          if (contrast < requiredContrast) {
-            violations.push({
-              wcagCriterion: '1.4.3',
-              severity: 'serious',
-              elementType: 'text',
-              elementSelector: el.id ? `#${el.id}` : el.tagName.toLowerCase(),
-              elementHtml: el.outerHTML.substring(0, 200),
-              pageUrl: pageUrl,
-              userImpact: `Low vision users cannot read text (${contrast.toFixed(1)}:1 ratio)`,
-              businessImpact: 'Content is inaccessible to visually impaired users',
-              legalRiskLevel: 'high',
-              fixDescription: `Improve contrast to at least ${requiredContrast}:1`,
-              fixCode: `/* Increase contrast */\\ncolor: #000000; /* or */\\nbackground-color: #FFFFFF;`,
-              fixEffort: 'easy',
-              estimatedFixTime: '10 minutes',
-              aiConfidence: 0.80
-            });
-          }
-        }
-      }
+        const he = el as HTMLElement;
+        const s = getComputedStyle(he);
+        
+        // Skip if no visible text
+        if (!he.textContent?.trim()) return;
+        
+        const fg = s.color; 
+        const bg = getEffectiveBG(he);
+        if (!fg) return;
+        
+        const ratio = contrast(fg, bg);
+        const size = parseFloat(s.fontSize);
+        const isBold = (parseInt(s.fontWeight,10) || 400) >= 700;
+        const large = size >= 18 || (size >= 14 && isBold);
+        const required = large ? 3 : 4.5;
 
+        if (ratio < required) {
+          violations.push({
+            wcagCriterion: '1.4.3',
+            severity: 'serious',
+            elementType: 'text',
+            elementSelector: he.id ? `#${he.id}` : he.tagName.toLowerCase(),
+            elementHtml: he.outerHTML.substring(0, 200),
+            pageUrl: pageUrl,
+            userImpact: `Insufficient contrast (${ratio.toFixed(2)}:1; needs ${required}:1)`,
+            businessImpact: 'Content inaccessible to users with low vision, colorblindness',
+            legalRiskLevel: 'high',
+            fixDescription: `Increase contrast to at least ${required}:1`,
+            fixCode: `/* Example contrast fix */\\ncolor: #000000; /* dark text */\\n/* or */\\nbackground-color: #FFFFFF; /* light background */`,
+            fixEffort: 'easy',
+            estimatedFixTime: '15 minutes',
+            aiConfidence: 0.85
+          });
+        }
+      });
+      
       return violations;
     }, url);
   }
