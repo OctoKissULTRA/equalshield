@@ -199,9 +199,10 @@ async function runDemo() {
     console.log(`📄 Full report saved to: ${reportPath}`);
     
   } catch (error) {
-    console.error('❌ Scan failed:', error.message);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('❌ Scan failed:', errorMessage);
     
-    if (error.message.includes('browser')) {
+    if (errorMessage.includes('browser')) {
       console.log('\n💡 TIP: Install Playwright browsers with:');
       console.log('   npm run scanner:install');
     }
