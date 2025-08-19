@@ -287,8 +287,9 @@ test.describe('WCAG Compliance Detection', () => {
           expect(violation.codeExample).toContain('alt=');
         }
         if (violation.rule.includes('2.1.1')) {
-          expect(violation.codeExample).toContain('tabindex') || 
-          expect(violation.codeExample).toContain('onkeydown');
+          const hasTabindex = violation.codeExample.includes('tabindex');
+          const hasOnkeydown = violation.codeExample.includes('onkeydown');
+          expect(hasTabindex || hasOnkeydown).toBe(true);
         }
       });
     });
