@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
     const scanResult = await db.insert(scans).values({
       teamId: orgId,
       url,
+      email,
       domain,
       status: 'processing'
     }).returning({ id: scans.id });
