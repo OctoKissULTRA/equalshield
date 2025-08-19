@@ -99,13 +99,13 @@ Format as JSON with structure:
           }],
           response_format: { type: 'json_object' },
           temperature: 0.3,
-          max_tokens: 4000
+          max_completion_tokens: 4000
         });
         response = completion.choices[0].message.content || '';
       } else if (this.claude) {
         const message = await this.claude.messages.create({
           model: 'claude-3-sonnet-20240229',
-          max_tokens: 4000,
+          max_completion_tokens: 4000,
           messages: [{ 
             role: 'user', 
             content: prompt 
@@ -183,13 +183,13 @@ Return JSON:
           messages: [{ role: 'user', content: prompt }],
           response_format: { type: 'json_object' },
           temperature: 0.3,
-          max_tokens: 3000
+          max_completion_tokens: 3000
         });
         response = completion.choices[0].message.content || '';
       } else if (this.claude) {
         const message = await this.claude.messages.create({
           model: 'claude-3-sonnet-20240229',
-          max_tokens: 3000,
+          max_completion_tokens: 3000,
           messages: [{ role: 'user', content: prompt }]
         });
         response = message.content[0].type === 'text' ? message.content[0].text : '';
@@ -244,13 +244,13 @@ Format as:
           messages: [{ role: 'user', content: prompt }],
           response_format: { type: 'json_object' },
           temperature: 0.2,
-          max_tokens: 2000
+          max_completion_tokens: 2000
         });
         response = completion.choices[0].message.content || '';
       } else if (this.claude) {
         const message = await this.claude.messages.create({
           model: 'claude-3-sonnet-20240229',
-          max_tokens: 2000,
+          max_completion_tokens: 2000,
           messages: [{ role: 'user', content: prompt }]
         });
         response = message.content[0].type === 'text' ? message.content[0].text : '';

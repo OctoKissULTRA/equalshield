@@ -8,7 +8,8 @@ import {
 } from '@/lib/db/queries';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-07-30.basil'
+  // Use default API version from Stripe account settings
+  typescript: true,
 });
 
 export async function createCheckoutSession({

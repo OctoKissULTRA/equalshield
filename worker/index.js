@@ -283,8 +283,28 @@ Return ONLY valid JSON array of findings:
   }
 }
 
+// Job-aware scan processor
+async function processScanWithJob(jobId, scan, tier) {
+  try {
+    await processScan(scan, tier);
+    
+    // Mark job as complete
+    await supabase.rpc('complete_job', { p_job_id: jobId });
+    console.log(`✅ Job ${jobId} completed successfully`);
+    
+  } catch (error) {
+    console.error(`❌ Job ${jobId} failed:`, error);
+    
+    // Mark job as failed
+    await supabase.rpc('fail_job', { 
+      p_job_id: jobId, 
+      p_error: error.message || 'Processing failed' 
+    });
+  }
+}
+
 // Main scan processor
-async function processScan(scan) {
+async function processScan(scan, tier = 'free') {
   const startTime = Date.now();
   let browser;
 
@@ -421,7 +441,7 @@ async function processScan(scan) {
   }
 }
 
-// Main worker loop
+// Main worker loop using Postgres queue
 async function startWorker() {
   console.log('🚀 EqualShield Worker Started');
   console.log(`📡 Worker ID: ${WORKER_ID}`);
@@ -431,26 +451,32 @@ async function startWorker() {
 
   while (true) {
     try {
-      // Poll for pending scans
-      const { data: scans, error } = await supabase
-        .from('scans')
-        .select('*')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: true })
-        .limit(1);
+      // Use atomic job claiming function
+      const { data: job, error } = await supabase
+        .rpc('claim_next_job', { p_worker_id: WORKER_ID });
 
       if (error) {
-        console.error('❌ Error fetching scans:', error);
+        console.error('❌ Error claiming job:', error);
         await sleep(5000);
         continue;
       }
 
-      if (scans && scans.length > 0) {
-        const scan = scans[0];
-        console.log(`📋 Processing scan ${scan.id} for ${scan.url}`);
-        await processScan(scan);
+      if (job && job.length > 0) {
+        const jobData = job[0];
+        console.log(`📋 Claimed job ${jobData.job_id} for scan ${jobData.scan_id}: ${jobData.url}`);
+        
+        // Get full scan data
+        const { data: scan } = await supabase
+          .from('scans')
+          .select('*')
+          .eq('id', jobData.scan_id)
+          .single();
+          
+        if (scan) {
+          await processScanWithJob(jobData.job_id, scan, jobData.tier);
+        }
       } else {
-        console.log('😴 No pending scans, waiting...');
+        console.log('😴 No available jobs, waiting...');
         await sleep(5000);
       }
 

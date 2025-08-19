@@ -2,31 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { scans, teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-
-// Simple rate limiting
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-
-function checkRateLimit(identifier: string): boolean {
-  const now = Date.now();
-  const windowMs = 60 * 1000; // 1 minute
-  const maxRequests = 5;
-
-  const current = rateLimitMap.get(identifier);
-  if (!current || now > current.resetTime) {
-    rateLimitMap.set(identifier, { count: 1, resetTime: now + windowMs });
-    return true;
-  }
-
-  if (current.count >= maxRequests) {
-    return false;
-  }
-
-  current.count++;
-  return true;
-}
+import { scanRateLimiter, withRateLimit } from '@/lib/utils/rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
+    // Apply rate limiting
+    const rateLimitHeaders = withRateLimit(scanRateLimiter)(req);
+    
     const { url, email, tier = 'free' } = await req.json();
     
     // Validate inputs
@@ -44,17 +26,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Invalid URL format' },
         { status: 400 }
-      );
-    }
-
-    // Rate limiting
-    const clientIP = req.headers.get('x-forwarded-for') || 'unknown';
-    const rateLimitKey = `${clientIP}:${email}`;
-    
-    if (!checkRateLimit(rateLimitKey)) {
-      return NextResponse.json(
-        { error: 'Rate limit exceeded. Please try again in 1 minute.' },
-        { status: 429 }
       );
     }
 
@@ -94,10 +65,21 @@ export async function POST(req: NextRequest) {
       message: 'Scan queued successfully. Results will be ready in ~30 seconds.',
       resultsUrl: `/scan/${scanId}`,
       estimatedTime: tier === 'enterprise' ? '45 seconds' : '30 seconds'
+    }, {
+      headers: rateLimitHeaders
     });
 
   } catch (error) {
     console.error('Scan API error:', error);
+    
+    // Handle rate limit errors
+    if (error instanceof Error && error.message.includes('Rate limit exceeded')) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 429 }
+      );
+    }
+    
     return NextResponse.json(
       { error: 'Failed to queue scan. Please try again.' },
       { status: 500 }
