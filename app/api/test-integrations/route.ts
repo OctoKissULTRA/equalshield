@@ -1,47 +1,46 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db/drizzle';
+import { teams } from '@/lib/db/schema';
 import Stripe from 'stripe';
 import OpenAI from 'openai';
 
 export async function GET() {
   const results: {
-    supabase: { status: string; data: any; error: string | null };
+    database: { status: string; data: any; error: string | null };
     stripe: { status: string; data: any; error: string | null };
     openai: { status: string; data: any; error: string | null };
   } = {
-    supabase: { status: 'not_tested', data: null, error: null },
+    database: { status: 'not_tested', data: null, error: null },
     stripe: { status: 'not_tested', data: null, error: null },
     openai: { status: 'not_tested', data: null, error: null }
   };
 
-  // Test Supabase
+  // Test Database (PostgreSQL + Drizzle)
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const postgresUrl = process.env.POSTGRES_URL;
     
-    if (!supabaseUrl || !supabaseKey) {
-      results.supabase = {
+    if (!postgresUrl) {
+      results.database = {
         status: 'error',
         data: null,
-        error: 'Missing Supabase environment variables'
+        error: 'Missing POSTGRES_URL environment variable'
       };
     } else {
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      // Test database connection by querying teams table
+      const teamsData = await db.select().from(teams).limit(1);
       
-      // Try to select from a table (will fail if table doesn't exist but connection will work)
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('*')
-        .limit(1);
-      
-      results.supabase = {
-        status: error ? 'error' : 'success',
-        data: data || 'Connected successfully',
-        error: error?.message || null
+      results.database = {
+        status: 'success',
+        data: {
+          connection: 'PostgreSQL + Drizzle ORM',
+          teams_count: teamsData.length,
+          sample_data: teamsData.length > 0 ? teamsData[0] : 'No teams yet'
+        },
+        error: null
       };
     }
   } catch (error) {
-    results.supabase = {
+    results.database = {
       status: 'error',
       data: null,
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -133,7 +132,7 @@ export async function GET() {
   // Log results to console for debugging
   console.log('🧪 INTEGRATION TEST RESULTS:');
   console.log('============================');
-  console.log('Supabase:', results.supabase);
+  console.log('Database:', results.database);
   console.log('Stripe:', results.stripe);
   console.log('OpenAI:', results.openai);
 

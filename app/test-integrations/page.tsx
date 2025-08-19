@@ -11,7 +11,7 @@ interface TestResult {
 }
 
 interface TestResults {
-  supabase: TestResult;
+  database: TestResult;
   stripe: TestResult;
   openai: TestResult;
 }
@@ -59,7 +59,7 @@ export default function TestIntegrationsPage() {
             🧪 EqualShield Integration Tests
           </h1>
           <p className="text-gray-600 mb-6">
-            Test all third-party integrations: Supabase, Stripe, and OpenAI
+            Test all integrations: PostgreSQL Database, Stripe, and OpenAI GPT-5
           </p>
           <Button 
             onClick={runTests} 
@@ -77,28 +77,34 @@ export default function TestIntegrationsPage() {
 
         {results && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Supabase Test */}
+            {/* Database Test */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  {getStatusIcon(results.supabase.status)}
-                  Supabase Database
+                  {getStatusIcon(results.database.status)}
+                  PostgreSQL Database
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={`px-3 py-2 rounded-lg text-sm font-medium mb-3 ${getStatusColor(results.supabase.status)}`}>
-                  Status: {results.supabase.status.toUpperCase()}
+                <div className={`px-3 py-2 rounded-lg text-sm font-medium mb-3 ${getStatusColor(results.database.status)}`}>
+                  Status: {results.database.status.toUpperCase()}
                 </div>
                 
-                {results.supabase.error && (
+                {results.database.error && (
                   <div className="text-red-600 text-sm mb-2">
-                    <strong>Error:</strong> {results.supabase.error}
+                    <strong>Error:</strong> {results.database.error}
                   </div>
                 )}
                 
-                {results.supabase.data && (
+                {results.database.data && (
                   <div className="text-green-600 text-sm">
-                    <strong>Data:</strong> {JSON.stringify(results.supabase.data, null, 2)}
+                    <strong>Connection:</strong> {results.database.data.connection}<br/>
+                    <strong>Teams:</strong> {results.database.data.teams_count}<br/>
+                    {results.database.data.sample_data && typeof results.database.data.sample_data === 'object' && (
+                      <div>
+                        <strong>Sample:</strong> {results.database.data.sample_data.name || 'Team data available'}
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
