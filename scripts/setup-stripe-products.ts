@@ -9,19 +9,46 @@ async function setupStripeProducts() {
   console.log('🚀 Setting up EqualShield Stripe products...\n');
 
   try {
-    // Professional Plan
+    // Starter Plan (Beat accessiBe's $59/month)
+    const starterProduct = await stripe.products.create({
+      name: 'EqualShield Starter',
+      description: 'AI-powered accessibility compliance for small businesses. Up to 10,000 page views/month.',
+      metadata: {
+        plan: 'starter',
+        features: 'Up to 10,000 page views, Automated WCAG 2.1 AA scanning, Basic violation reports, Email support'
+      }
+    });
+
+    const starterPrice = await stripe.prices.create({
+      product: starterProduct.id,
+      unit_amount: 4900, // $49.00 (beats accessiBe's $59)
+      currency: 'usd',
+      recurring: {
+        interval: 'month'
+      },
+      metadata: {
+        plan: 'starter'
+      }
+    });
+
+    console.log('✅ Starter Plan Created:');
+    console.log(`   Product ID: ${starterProduct.id}`);
+    console.log(`   Price ID: ${starterPrice.id}`);
+    console.log(`   Amount: $${starterPrice.unit_amount! / 100}/month\n`);
+
+    // Professional Plan (Beat competitors' growth plans)
     const professionalProduct = await stripe.products.create({
       name: 'EqualShield Professional',
-      description: 'Complete WCAG 2.1 AA compliance scanning and VPAT generation for growing businesses',
+      description: 'Complete compliance solution for growing businesses. Up to 50,000 page views/month.',
       metadata: {
         plan: 'professional',
-        features: 'Monthly scans, Basic VPAT generation, Email support'
+        features: 'Up to 50,000 page views, Advanced WCAG scanning, VPAT generation, Priority email support, Legal risk assessment'
       }
     });
 
     const professionalPrice = await stripe.prices.create({
       product: professionalProduct.id,
-      unit_amount: 99700, // $997.00
+      unit_amount: 14900, // $149.00/month (beats $1,490/year competition)
       currency: 'usd',
       recurring: {
         interval: 'month'
@@ -36,19 +63,19 @@ async function setupStripeProducts() {
     console.log(`   Price ID: ${professionalPrice.id}`);
     console.log(`   Amount: $${professionalPrice.unit_amount! / 100}/month\n`);
 
-    // Enterprise Plan
+    // Enterprise Plan (Competitive with scale plans)
     const enterpriseProduct = await stripe.products.create({
       name: 'EqualShield Enterprise',
-      description: 'Advanced compliance platform with unlimited scans, priority support, and custom integrations',
+      description: 'Full enterprise compliance suite with unlimited scanning and legal protection.',
       metadata: {
         plan: 'enterprise',
-        features: 'Unlimited scans, Advanced VPAT, Priority support, Custom integrations'
+        features: 'Unlimited page views, AI + Human testing, Custom VPAT generation, Dedicated support, Legal protection up to $25k'
       }
     });
 
     const enterprisePrice = await stripe.prices.create({
       product: enterpriseProduct.id,
-      unit_amount: 249700, // $2,497.00
+      unit_amount: 39900, // $399.00/month (competitive with $3,990/year plans)
       currency: 'usd',
       recurring: {
         interval: 'month'
@@ -80,8 +107,10 @@ async function setupStripeProducts() {
     // Environment Variables
     console.log('🔧 ADD THESE TO YOUR VERCEL ENVIRONMENT VARIABLES:');
     console.log('================================================');
+    console.log(`STRIPE_PRICE_ID_STARTER=${starterPrice.id}`);
     console.log(`STRIPE_PRICE_ID_PROFESSIONAL=${professionalPrice.id}`);
     console.log(`STRIPE_PRICE_ID_ENTERPRISE=${enterprisePrice.id}`);
+    console.log(`STRIPE_PRODUCT_ID_STARTER=${starterProduct.id}`);
     console.log(`STRIPE_PRODUCT_ID_PROFESSIONAL=${professionalProduct.id}`);
     console.log(`STRIPE_PRODUCT_ID_ENTERPRISE=${enterpriseProduct.id}`);
     console.log(`STRIPE_PRODUCT_ID_GLOBAL=${globalProduct.id}\n`);
