@@ -75,15 +75,82 @@ export const scans = pgTable('scans', {
   teamId: integer('team_id').references(() => teams.id),
   url: varchar('url', { length: 500 }).notNull(),
   email: varchar('email', { length: 255 }).notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('pending'),
-  overallScore: integer('overall_score'),
-  wcagLevel: varchar('wcag_level', { length: 50 }),
-  criticalIssues: integer('critical_issues').default(0),
-  majorIssues: integer('major_issues').default(0),
-  minorIssues: integer('minor_issues').default(0),
-  results: json('results'),
+  domain: varchar('domain', { length: 255 }),
+  pagesScanned: integer('pages_scanned').default(1),
+  scanDepth: varchar('scan_depth', { length: 50 }).default('standard'),
+  
+  // Compliance scores
+  wcagScore: integer('wcag_score'),
+  adaRiskScore: integer('ada_risk_score'),
+  lawsuitProbability: decimal('lawsuit_probability', { precision: 5, scale: 2 }),
+  
+  // Violation summary
+  totalViolations: integer('total_violations').default(0),
+  criticalViolations: integer('critical_violations').default(0),
+  seriousViolations: integer('serious_violations').default(0),
+  moderateViolations: integer('moderate_violations').default(0),
+  minorViolations: integer('minor_violations').default(0),
+  
+  // Detailed results
+  violations: json('violations'),
+  aiAnalysis: json('ai_analysis'),
+  recommendations: json('recommendations'),
+  legalAssessment: json('legal_assessment'),
+  
+  // Status tracking
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  errorMessage: text('error_message'),
+  processingTimeMs: integer('processing_time_ms'),
+  
   createdAt: timestamp('created_at').notNull().defaultNow(),
   completedAt: timestamp('completed_at'),
+});
+
+// Detailed violations tracking
+export const violations = pgTable('violations', {
+  id: serial('id').primaryKey(),
+  scanId: integer('scan_id').notNull().references(() => scans.id, { onDelete: 'cascade' }),
+  
+  // WCAG details
+  wcagCriterion: varchar('wcag_criterion', { length: 20 }).notNull(),
+  wcagVersion: varchar('wcag_version', { length: 10 }).default('2.1'),
+  conformanceLevel: varchar('conformance_level', { length: 3 }).default('AA'),
+  
+  // Violation info
+  severity: varchar('severity', { length: 20 }).notNull(),
+  elementType: varchar('element_type', { length: 50 }),
+  elementSelector: text('element_selector'),
+  elementHtml: text('element_html'),
+  pageUrl: text('page_url'),
+  
+  // Impact analysis
+  userImpact: text('user_impact').notNull(),
+  businessImpact: text('business_impact'),
+  legalRiskLevel: varchar('legal_risk_level', { length: 20 }),
+  lawsuitCases: json('lawsuit_cases'), // Similar cases that resulted in lawsuits
+  
+  // Fix information
+  fixDescription: text('fix_description').notNull(),
+  fixCode: text('fix_code'),
+  fixEffort: varchar('fix_effort', { length: 20 }), // 'trivial', 'easy', 'moderate', 'complex'
+  estimatedFixTime: varchar('estimated_fix_time', { length: 50 }), // '5 minutes', '1 hour', etc
+  
+  // Tracking
+  status: varchar('status', { length: 50 }).default('open'),
+  aiConfidence: decimal('ai_confidence', { precision: 3, scale: 2 }), // 0.00 to 1.00
+  falsePositive: integer('false_positive').default(0), // Using integer for boolean (0/1)
+  
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Usage tracking for billing
+export const usageEvents = pgTable('usage_events', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id),
+  eventType: varchar('event_type', { length: 50 }), // 'page_scan', 'ai_analysis', 'report_generated'
+  count: integer('count').default(1),
+  metadata: json('metadata'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
 export const teamsRelations = relations(teams, ({ many }) => ({
@@ -91,6 +158,7 @@ export const teamsRelations = relations(teams, ({ many }) => ({
   activityLogs: many(activityLogs),
   invitations: many(invitations),
   scans: many(scans),
+  usageEvents: many(usageEvents),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -131,9 +199,24 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   }),
 }));
 
-export const scansRelations = relations(scans, ({ one }) => ({
+export const scansRelations = relations(scans, ({ one, many }) => ({
   team: one(teams, {
     fields: [scans.teamId],
+    references: [teams.id],
+  }),
+  violations: many(violations),
+}));
+
+export const violationsRelations = relations(violations, ({ one }) => ({
+  scan: one(scans, {
+    fields: [violations.scanId],
+    references: [scans.id],
+  }),
+}));
+
+export const usageEventsRelations = relations(usageEvents, ({ one }) => ({
+  team: one(teams, {
+    fields: [usageEvents.teamId],
     references: [teams.id],
   }),
 }));
@@ -150,6 +233,10 @@ export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
 export type Scan = typeof scans.$inferSelect;
 export type NewScan = typeof scans.$inferInsert;
+export type Violation = typeof violations.$inferSelect;
+export type NewViolation = typeof violations.$inferInsert;
+export type UsageEvent = typeof usageEvents.$inferSelect;
+export type NewUsageEvent = typeof usageEvents.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;
