@@ -116,5 +116,31 @@ export async function getTeamForUser() {
     .where(eq(teamMembers.userId, user.id))
     .limit(1);
 
-  return result[0]?.team || null;
+  const teamData = result[0]?.team;
+  if (!teamData) {
+    return null;
+  }
+
+  // Get all team members with their user data
+  const members = await db()
+    .select({
+      id: teamMembers.id,
+      role: teamMembers.role,
+      userId: teamMembers.userId,
+      teamId: teamMembers.teamId,
+      joinedAt: teamMembers.joinedAt,
+      user: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+      },
+    })
+    .from(teamMembers)
+    .leftJoin(users, eq(teamMembers.userId, users.id))
+    .where(eq(teamMembers.teamId, teamData.id));
+
+  return {
+    ...teamData,
+    teamMembers: members,
+  };
 }
