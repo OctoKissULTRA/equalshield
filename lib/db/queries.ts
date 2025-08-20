@@ -105,30 +105,27 @@ export async function getTeamForUser() {
     return null;
   }
 
-  const result = await db()
+  // Single optimized query with proper shape matching TeamDataWithMembers
+  const rows = await db()
     .select({
-      teamId: teamMembers.teamId,
-      role: teamMembers.role,
-      team: teams,
-    })
-    .from(teamMembers)
-    .leftJoin(teams, eq(teamMembers.teamId, teams.id))
-    .where(eq(teamMembers.userId, user.id))
-    .limit(1);
-
-  const teamData = result[0]?.team;
-  if (!teamData) {
-    return null;
-  }
-
-  // Get all team members with their user data (using INNER JOIN to ensure user exists)
-  const members = await db()
-    .select({
-      id: teamMembers.id,
-      role: teamMembers.role,
-      userId: teamMembers.userId,
-      teamId: teamMembers.teamId,
-      joinedAt: teamMembers.joinedAt,
+      team: {
+        id: teams.id,
+        name: teams.name,
+        createdAt: teams.createdAt,
+        updatedAt: teams.updatedAt,
+        stripeCustomerId: teams.stripeCustomerId,
+        stripeSubscriptionId: teams.stripeSubscriptionId,
+        stripeProductId: teams.stripeProductId,
+        planName: teams.planName,
+        subscriptionStatus: teams.subscriptionStatus,
+      },
+      member: {
+        id: teamMembers.id,
+        role: teamMembers.role,
+        userId: teamMembers.userId,
+        teamId: teamMembers.teamId,
+        joinedAt: teamMembers.joinedAt,
+      },
       user: {
         id: users.id,
         name: users.name,
@@ -136,16 +133,57 @@ export async function getTeamForUser() {
       },
     })
     .from(teamMembers)
+    .innerJoin(teams, eq(teamMembers.teamId, teams.id))
     .innerJoin(users, eq(teamMembers.userId, users.id))
-    .where(eq(teamMembers.teamId, teamData.id));
+    .where(eq(teamMembers.userId, user.id));
 
-  // Filter out any members without a user (extra safety) and type guard
-  const membersWithUser = members.filter((member): member is typeof member & { 
-    user: { id: number; name: string | null; email: string } 
-  } => member.user !== null);
+  if (!rows.length) {
+    return null;
+  }
+
+  const team = rows[0].team;
+  
+  // Get all team members for this team
+  const allTeamMembers = await db()
+    .select({
+      team: {
+        id: teams.id,
+        name: teams.name,
+        createdAt: teams.createdAt,
+        updatedAt: teams.updatedAt,
+        stripeCustomerId: teams.stripeCustomerId,
+        stripeSubscriptionId: teams.stripeSubscriptionId,
+        stripeProductId: teams.stripeProductId,
+        planName: teams.planName,
+        subscriptionStatus: teams.subscriptionStatus,
+      },
+      member: {
+        id: teamMembers.id,
+        role: teamMembers.role,
+        userId: teamMembers.userId,
+        teamId: teamMembers.teamId,
+        joinedAt: teamMembers.joinedAt,
+      },
+      user: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+      },
+    })
+    .from(teamMembers)
+    .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(eq(teamMembers.teamId, team.id));
+
+  // Belt-and-suspenders: ensure no null users (should be impossible with INNER JOIN + FK constraints)
+  const membersWithUser = allTeamMembers
+    .map(r => ({ ...r.member, user: r.user }))
+    .filter((m): m is typeof m & { user: { id: number; name: string | null; email: string } } => 
+      Boolean(m.user)
+    );
 
   return {
-    ...teamData,
+    ...team,
     teamMembers: membersWithUser,
   };
 }
