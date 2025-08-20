@@ -8,6 +8,9 @@ import {
 } from '@/lib/db/queries';
 import { getStripe } from '@/lib/clients/stripe';
 
+// Re-export for backward compatibility
+export { getStripe };
+
 export async function createCheckoutSession({
   team,
   priceId
