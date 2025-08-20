@@ -1,8 +1,11 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
-import Stripe from 'stripe';
-import OpenAI from 'openai';
+import { getStripe } from '@/lib/clients/stripe';
+import { getOpenAI } from '@/lib/clients/openai';
 
 export async function GET() {
   const results: {
@@ -58,9 +61,7 @@ export async function GET() {
         error: 'Missing STRIPE_SECRET_KEY environment variable'
       };
     } else {
-      const stripe = new Stripe(stripeSecretKey);
-      
-      const prices = await stripe.prices.list({ limit: 3 });
+      const prices = await getStripe().prices.list({ limit: 3 });
       
       results.stripe = {
         status: 'success',
@@ -95,12 +96,8 @@ export async function GET() {
         error: 'Missing OPENAI_API_KEY environment variable'
       };
     } else {
-      const openai = new OpenAI({
-        apiKey: openaiApiKey
-      });
-      
       // Test with a simple completion
-      const completion = await openai.chat.completions.create({
+      const completion = await getOpenAI().chat.completions.create({
         model: "gpt-5-2025-08-07",
         messages: [
           {

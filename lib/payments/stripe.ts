@@ -6,11 +6,7 @@ import {
   getUser,
   updateTeamSubscription
 } from '@/lib/db/queries';
-
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-07-30.basil', // Version required by Stripe v18.1.0
-  typescript: true,
-});
+import { getStripe } from '@/lib/clients/stripe';
 
 export async function createCheckoutSession({
   team,
@@ -25,7 +21,7 @@ export async function createCheckoutSession({
     redirect(`/sign-up?redirect=checkout&priceId=${priceId}`);
   }
 
-  const session = await stripe.checkout.sessions.create({
+  const session = await getStripe().checkout.sessions.create({
     payment_method_types: ['card'],
     line_items: [
       {
@@ -53,17 +49,17 @@ export async function createCustomerPortalSession(team: Team) {
   }
 
   let configuration: Stripe.BillingPortal.Configuration;
-  const configurations = await stripe.billingPortal.configurations.list();
+  const configurations = await getStripe().billingPortal.configurations.list();
 
   if (configurations.data.length > 0) {
     configuration = configurations.data[0];
   } else {
-    const product = await stripe.products.retrieve(team.stripeProductId);
+    const product = await getStripe().products.retrieve(team.stripeProductId);
     if (!product.active) {
       throw new Error("Team's product is not active in Stripe");
     }
 
-    const prices = await stripe.prices.list({
+    const prices = await getStripe().prices.list({
       product: product.id,
       active: true
     });
@@ -71,7 +67,7 @@ export async function createCustomerPortalSession(team: Team) {
       throw new Error("No active prices found for the team's product");
     }
 
-    configuration = await stripe.billingPortal.configurations.create({
+    configuration = await getStripe().billingPortal.configurations.create({
       business_profile: {
         headline: 'Manage your subscription'
       },
@@ -108,7 +104,7 @@ export async function createCustomerPortalSession(team: Team) {
     });
   }
 
-  return stripe.billingPortal.sessions.create({
+  return getStripe().billingPortal.sessions.create({
     customer: team.stripeCustomerId,
     return_url: `${process.env.BASE_URL}/dashboard`,
     configuration: configuration.id
@@ -148,7 +144,7 @@ export async function handleSubscriptionChange(
 }
 
 export async function getStripePrices() {
-  const prices = await stripe.prices.list({
+  const prices = await getStripe().prices.list({
     expand: ['data.product'],
     active: true,
     type: 'recurring'
@@ -166,7 +162,7 @@ export async function getStripePrices() {
 }
 
 export async function getStripeProducts() {
-  const products = await stripe.products.list({
+  const products = await getStripe().products.list({
     active: true,
     expand: ['data.default_price']
   });
