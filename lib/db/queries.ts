@@ -105,26 +105,16 @@ export async function getTeamForUser() {
     return null;
   }
 
-  const result = await db().query.teamMembers.findFirst({
-    where: eq(teamMembers.userId, user.id),
-    with: {
-      team: {
-        with: {
-          teamMembers: {
-            with: {
-              user: {
-                columns: {
-                  id: true,
-                  name: true,
-                  email: true
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  });
+  const result = await db()
+    .select({
+      teamId: teamMembers.teamId,
+      role: teamMembers.role,
+      team: teams,
+    })
+    .from(teamMembers)
+    .leftJoin(teams, eq(teamMembers.teamId, teams.id))
+    .where(eq(teamMembers.userId, user.id))
+    .limit(1);
 
-  return result?.team || null;
+  return result[0]?.team || null;
 }

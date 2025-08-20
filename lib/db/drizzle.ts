@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 let client: postgres.Sql | null = null;
-let db: ReturnType<typeof drizzle> | null = null;
+let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
 function getDatabase() {
   if (!db) {
