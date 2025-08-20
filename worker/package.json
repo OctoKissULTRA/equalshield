@@ -6,8 +6,9 @@
     "node": ">=20.18.1"
   },
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js"
+    "start": "node queue-processor.js",
+    "dev": "node --watch queue-processor.js",
+    "legacy": "node index.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.46.1",

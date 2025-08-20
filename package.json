@@ -29,6 +29,7 @@
     "@radix-ui/react-radio-group": "^1.2.1",
     "@radix-ui/react-slot": "^1.1.1",
     "@supabase/supabase-js": "^2.46.1",
+    "@sentry/nextjs": "^8.40.0",
     "@tailwindcss/postcss": "4.1.7",
     "@types/node": "^22.15.18",
     "@types/react": "19.1.4",
