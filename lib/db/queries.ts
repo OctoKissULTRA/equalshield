@@ -121,7 +121,7 @@ export async function getTeamForUser() {
     return null;
   }
 
-  // Get all team members with their user data
+  // Get all team members with their user data (using INNER JOIN to ensure user exists)
   const members = await db()
     .select({
       id: teamMembers.id,
@@ -136,11 +136,16 @@ export async function getTeamForUser() {
       },
     })
     .from(teamMembers)
-    .leftJoin(users, eq(teamMembers.userId, users.id))
+    .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(eq(teamMembers.teamId, teamData.id));
+
+  // Filter out any members without a user (extra safety) and type guard
+  const membersWithUser = members.filter((member): member is typeof member & { 
+    user: { id: number; name: string | null; email: string } 
+  } => member.user !== null);
 
   return {
     ...teamData,
-    teamMembers: members,
+    teamMembers: membersWithUser,
   };
 }
