@@ -284,7 +284,7 @@ export async function POST(req: NextRequest) {
     const repoInfo = { owner, repo: repo.replace('.git', ''), token: githubToken };
 
     // Get scan data
-    const [scanData] = await db
+    const [scanData] = await db()
       .select()
       .from(scans)
       .where(eq(scans.id, parseInt(scanId)))
@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Get violations
-    const scanViolations = await db
+    const scanViolations = await db()
       .select()
       .from(violations)
       .where(eq(violations.scanId, parseInt(scanId)));

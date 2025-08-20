@@ -41,7 +41,7 @@ async function logActivity(
     action: type,
     ipAddress: ipAddress || ''
   };
-  await db.insert(activityLogs).values(newActivity);
+  await db().insert(activityLogs).values(newActivity);
 }
 
 const signInSchema = z.object({
@@ -52,7 +52,7 @@ const signInSchema = z.object({
 export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const { email, password } = data;
 
-  const userWithTeam = await db
+  const userWithTeam = await db()
     .select({
       user: users,
       team: teams
@@ -109,7 +109,7 @@ const signUpSchema = z.object({
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const { email, password, inviteId } = data;
 
-  const existingUser = await db
+  const existingUser = await db()
     .select()
     .from(users)
     .where(eq(users.email, email))
@@ -131,7 +131,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     role: 'owner' // Default role, will be overridden if there's an invitation
   };
 
-  const [createdUser] = await db.insert(users).values(newUser).returning();
+  const [createdUser] = await db().insert(users).values(newUser).returning();
 
   if (!createdUser) {
     return {
@@ -147,7 +147,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
   if (inviteId) {
     // Check if there's a valid invitation
-    const [invitation] = await db
+    const [invitation] = await db()
       .select()
       .from(invitations)
       .where(
@@ -163,14 +163,14 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       teamId = invitation.teamId;
       userRole = invitation.role;
 
-      await db
+      await db()
         .update(invitations)
         .set({ status: 'accepted' })
         .where(eq(invitations.id, invitation.id));
 
       await logActivity(teamId, createdUser.id, ActivityType.ACCEPT_INVITATION);
 
-      [createdTeam] = await db
+      [createdTeam] = await db()
         .select()
         .from(teams)
         .where(eq(teams.id, teamId))
@@ -184,7 +184,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       name: `${email}'s Team`
     };
 
-    [createdTeam] = await db.insert(teams).values(newTeam).returning();
+    [createdTeam] = await db().insert(teams).values(newTeam).returning();
 
     if (!createdTeam) {
       return {
@@ -207,7 +207,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   };
 
   await Promise.all([
-    db.insert(teamMembers).values(newTeamMember),
+    db().insert(teamMembers).values(newTeamMember),
     logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
     setSession(createdUser)
   ]);
@@ -275,7 +275,7 @@ export const updatePassword = validatedActionWithUser(
     const userWithTeam = await getUserWithTeam(user.id);
 
     await Promise.all([
-      db
+      db()
         .update(users)
         .set({ passwordHash: newPasswordHash })
         .where(eq(users.id, user.id)),
@@ -314,7 +314,7 @@ export const deleteAccount = validatedActionWithUser(
     );
 
     // Soft delete
-    await db
+    await db()
       .update(users)
       .set({
         deletedAt: sql`CURRENT_TIMESTAMP`,
@@ -323,7 +323,7 @@ export const deleteAccount = validatedActionWithUser(
       .where(eq(users.id, user.id));
 
     if (userWithTeam?.teamId) {
-      await db
+      await db()
         .delete(teamMembers)
         .where(
           and(
@@ -350,7 +350,7 @@ export const updateAccount = validatedActionWithUser(
     const userWithTeam = await getUserWithTeam(user.id);
 
     await Promise.all([
-      db.update(users).set({ name, email }).where(eq(users.id, user.id)),
+      db().update(users).set({ name, email }).where(eq(users.id, user.id)),
       logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT)
     ]);
 
@@ -372,7 +372,7 @@ export const removeTeamMember = validatedActionWithUser(
       return { error: 'User is not part of a team' };
     }
 
-    await db
+    await db()
       .delete(teamMembers)
       .where(
         and(
@@ -406,7 +406,7 @@ export const inviteTeamMember = validatedActionWithUser(
       return { error: 'User is not part of a team' };
     }
 
-    const existingMember = await db
+    const existingMember = await db()
       .select()
       .from(users)
       .leftJoin(teamMembers, eq(users.id, teamMembers.userId))
@@ -420,7 +420,7 @@ export const inviteTeamMember = validatedActionWithUser(
     }
 
     // Check if there's an existing invitation
-    const existingInvitation = await db
+    const existingInvitation = await db()
       .select()
       .from(invitations)
       .where(
@@ -437,7 +437,7 @@ export const inviteTeamMember = validatedActionWithUser(
     }
 
     // Create a new invitation
-    await db.insert(invitations).values({
+    await db().insert(invitations).values({
       teamId: userWithTeam.teamId,
       email,
       role,

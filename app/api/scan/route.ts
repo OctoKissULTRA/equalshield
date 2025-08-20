@@ -32,11 +32,11 @@ export async function POST(req: NextRequest) {
     // Get or create organization
     const domain = new URL(url).hostname;
     
-    let orgResult = await db.select().from(teams).where(eq(teams.stripeCustomerId, email)).limit(1);
+    let orgResult = await db().select().from(teams).where(eq(teams.stripeCustomerId, email)).limit(1);
     let orgId: number;
     
     if (orgResult.length === 0) {
-      const newOrg = await db.insert(teams).values({
+      const newOrg = await db().insert(teams).values({
         name: domain,
         planName: tier,
         stripeCustomerId: email // Using for email temporarily
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create scan with 'pending' status - worker will pick it up
-    const scanResult = await db.insert(scans).values({
+    const scanResult = await db().insert(scans).values({
       teamId: orgId,
       url,
       email,

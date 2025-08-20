@@ -44,7 +44,7 @@ async function seed() {
   const password = 'admin123';
   const passwordHash = await hashPassword(password);
 
-  const [user] = await db
+  const [user] = await db()
     .insert(users)
     .values([
       {
@@ -57,14 +57,14 @@ async function seed() {
 
   console.log('Initial user created.');
 
-  const [team] = await db
+  const [team] = await db()
     .insert(teams)
     .values({
       name: 'Test Team',
     })
     .returning();
 
-  await db.insert(teamMembers).values({
+  await db().insert(teamMembers).values({
     teamId: team.id,
     userId: user.id,
     role: 'owner',

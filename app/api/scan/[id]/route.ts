@@ -19,7 +19,7 @@ export async function GET(
     }
 
     // Get scan data
-    const [scan] = await db
+    const [scan] = await db()
       .select()
       .from(scans)
       .where(eq(scans.id, scanId))
@@ -35,7 +35,7 @@ export async function GET(
     // Get violations if scan is complete
     let scanViolations: any[] = [];
     if (scan.status === 'complete') {
-      scanViolations = await db
+      scanViolations = await db()
         .select()
         .from(violations)
         .where(eq(violations.scanId, scanId));

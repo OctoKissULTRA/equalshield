@@ -27,7 +27,7 @@ export async function GET() {
       };
     } else {
       // Test database connection by querying teams table
-      const teamsData = await db.select().from(teams).limit(1);
+      const teamsData = await db().select().from(teams).limit(1);
       
       results.database = {
         status: 'success',

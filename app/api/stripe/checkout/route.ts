@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
       throw new Error("No user ID found in session's client_reference_id.");
     }
 
-    const user = await db
+    const user = await db()
       .select()
       .from(users)
       .where(eq(users.id, Number(userId)))
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       throw new Error('User not found in database.');
     }
 
-    const userTeam = await db
+    const userTeam = await db()
       .select({
         teamId: teamMembers.teamId,
       })
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
       throw new Error('User is not associated with any team.');
     }
 
-    await db
+    await db()
       .update(teams)
       .set({
         stripeCustomerId: customerId,

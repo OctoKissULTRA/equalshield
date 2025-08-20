@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Get user's organization
-    const [org] = await db
+    const [org] = await db()
       .select()
       .from(teams)
       .where(eq(teams.stripeCustomerId, email))
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const recentScans = await db
+    const recentScans = await db()
       .select()
       .from(scans)
       .where(
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
     const criticalViolations = completedScans.reduce((sum, s) => sum + (s.criticalViolations || 0), 0);
 
     // Get top violation types
-    const violationStats = await db
+    const violationStats = await db()
       .select({
         wcagCriterion: violations.wcagCriterion,
         severity: violations.severity,
