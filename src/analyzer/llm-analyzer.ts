@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { OpenAI } from 'openai';
 import { Violation, PageElement, CompanyInfo, LawsuitRiskAssessment, AutoFix } from '../scanner/types';
 
@@ -16,22 +15,15 @@ interface LLMAnalysisResult {
 }
 
 export class LLMComplianceAnalyzer {
-  private openai: OpenAI | null = null;
-  private claude: Anthropic | null = null;
+  private openai: OpenAI;
   
   constructor() {
-    // Primary: OpenAI
-    if (process.env.OPENAI_API_KEY) {
-      this.openai = new OpenAI({ 
-        apiKey: process.env.OPENAI_API_KEY 
-      });
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is required');
     }
-    // Fallback: Claude (optional)
-    if (process.env.CLAUDE_API_KEY) {
-      this.claude = new Anthropic({ 
-        apiKey: process.env.CLAUDE_API_KEY 
-      });
-    }
+    this.openai = new OpenAI({ 
+      apiKey: process.env.OPENAI_API_KEY 
+    });
   }
 
   async analyzeForCompliance(
@@ -88,34 +80,17 @@ Format as JSON with structure:
 }`;
 
     try {
-      let response: string;
-      
-      if (this.openai) {
-        const completion = await this.openai.chat.completions.create({
-          model: 'gpt-5',
-          messages: [{ 
-            role: 'user', 
-            content: prompt 
-          }],
-          response_format: { type: 'json_object' },
-          temperature: 0.3,
-          max_completion_tokens: 4000
-        });
-        response = completion.choices[0].message.content || '';
-      } else if (this.claude) {
-        const message = await this.claude.messages.create({
-          model: 'claude-3-sonnet-20240229',
-          max_completion_tokens: 4000,
-          messages: [{ 
-            role: 'user', 
-            content: prompt 
-          }]
-        });
-        response = message.content[0].type === 'text' ? message.content[0].text : '';
-      } else {
-        // Fallback to rule-based analysis if no LLM available
-        return this.fallbackAnalysis(elements, existingViolations);
-      }
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-5-2025-08-07',
+        messages: [{ 
+          role: 'user', 
+          content: prompt 
+        }],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+        max_completion_tokens: 4000
+      });
+      const response = completion.choices[0].message.content || '';
 
       return JSON.parse(response) as LLMAnalysisResult;
     } catch (error) {
@@ -175,27 +150,14 @@ Return JSON:
 }`;
 
     try {
-      let response: string;
-      
-      if (this.openai) {
-        const completion = await this.openai.chat.completions.create({
-          model: 'gpt-5',
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' },
-          temperature: 0.3,
-          max_completion_tokens: 3000
-        });
-        response = completion.choices[0].message.content || '';
-      } else if (this.claude) {
-        const message = await this.claude.messages.create({
-          model: 'claude-3-sonnet-20240229',
-          max_completion_tokens: 3000,
-          messages: [{ role: 'user', content: prompt }]
-        });
-        response = message.content[0].type === 'text' ? message.content[0].text : '';
-      } else {
-        return this.calculateRiskWithoutLLM(violations, companyInfo);
-      }
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-5-2025-08-07',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+        max_completion_tokens: 3000
+      });
+      const response = completion.choices[0].message.content || '';
 
       return JSON.parse(response) as LawsuitRiskAssessment;
     } catch (error) {
@@ -236,27 +198,14 @@ Format as:
 }`;
 
     try {
-      let response: string;
-      
-      if (this.openai) {
-        const completion = await this.openai.chat.completions.create({
-          model: 'gpt-5',
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' },
-          temperature: 0.2,
-          max_completion_tokens: 2000
-        });
-        response = completion.choices[0].message.content || '';
-      } else if (this.claude) {
-        const message = await this.claude.messages.create({
-          model: 'claude-3-sonnet-20240229',
-          max_completion_tokens: 2000,
-          messages: [{ role: 'user', content: prompt }]
-        });
-        response = message.content[0].type === 'text' ? message.content[0].text : '';
-      } else {
-        return this.generateBasicFix(violation, framework);
-      }
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-5-2025-08-07',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        max_completion_tokens: 2000
+      });
+      const response = completion.choices[0].message.content || '';
 
       return JSON.parse(response) as AutoFix;
     } catch (error) {
