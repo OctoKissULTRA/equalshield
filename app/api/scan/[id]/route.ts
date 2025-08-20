@@ -11,7 +11,7 @@ export async function GET(
     const resolvedParams = await params;
     const scanId = parseInt(resolvedParams.id);
     
-    if (isNaN(scanId)) {
+    if (isNaN(scanId) || scanId <= 0) {
       return NextResponse.json(
         { error: 'Invalid scan ID' },
         { status: 400 }

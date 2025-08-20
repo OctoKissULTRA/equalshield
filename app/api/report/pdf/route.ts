@@ -472,21 +472,25 @@ export async function GET(req: NextRequest) {
 
     // Convert to PDF using Playwright
     const browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle' });
+    let pdf: Buffer;
     
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: {
-        top: '20px',
-        right: '20px',
-        bottom: '20px',
-        left: '20px'
-      }
-    });
-    
-    await browser.close();
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle' });
+      
+      pdf = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '20px',
+          right: '20px',
+          bottom: '20px',
+          left: '20px'
+        }
+      });
+    } finally {
+      await browser.close();
+    }
 
     // Return PDF
     return new NextResponse(pdf as any, {

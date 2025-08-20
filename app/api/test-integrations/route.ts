@@ -101,11 +101,11 @@ export async function GET() {
       
       // Test with a simple completion
       const completion = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: "gpt-4o",
         messages: [
           {
             role: "user",
-            content: "Just respond with 'GPT-5 API test successful' - this is a connection test"
+            content: "Just respond with 'GPT-4o API test successful' - this is a connection test"
           }
         ],
         max_completion_tokens: 20

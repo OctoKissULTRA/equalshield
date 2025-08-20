@@ -81,12 +81,9 @@ export const scanRateLimiter = new RateLimiter({
   windowMs: 60 * 1000, // 1 minute
   maxRequests: 5, // 5 scans per minute
   keyGenerator: (req) => {
-    // Try to get email from body, fall back to IP
-    const body = req.body;
-    if (body && typeof body === 'object' && 'email' in body) {
-      return `scan:${body.email}`;
-    }
-    return `scan:${req.headers.get('x-forwarded-for') || 'unknown'}`;
+    // Use IP as key since req.body may not be parsed yet
+    const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
+    return `scan:${ip}`;
   }
 });
 

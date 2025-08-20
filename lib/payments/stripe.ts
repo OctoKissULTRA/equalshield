@@ -8,7 +8,7 @@ import {
 } from '@/lib/db/queries';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  // Use default API version from Stripe account settings
+  apiVersion: '2024-06-20', // Pin to specific version for stability
   typescript: true,
 });
 

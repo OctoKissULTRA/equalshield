@@ -44,9 +44,13 @@ export async function getSession() {
 }
 
 export async function setSession(user: NewUser) {
+  if (!user.id) {
+    throw new Error('User ID is required to set session');
+  }
+  
   const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const session: SessionData = {
-    user: { id: user.id! },
+    user: { id: user.id },
     expires: expiresInOneDay.toISOString(),
   };
   const encryptedSession = await signToken(session);
