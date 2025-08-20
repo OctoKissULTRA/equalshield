@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
 
     // Get domain performance
     const domainStats = completedScans.reduce((acc, scan) => {
-      const domain = scan.domain;
+      const domain = scan.domain || 'unknown';
       if (!acc[domain]) {
         acc[domain] = {
           domain,
