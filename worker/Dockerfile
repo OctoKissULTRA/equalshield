@@ -1,4 +1,8 @@
-FROM mcr.microsoft.com/playwright:v1.48.0-noble
+# Use Node 20 with Playwright pre-installed
+FROM node:20-bullseye
+
+# Install Playwright and browser dependencies
+RUN npx playwright install --with-deps chromium
 
 WORKDIR /app
 
