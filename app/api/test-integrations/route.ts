@@ -101,7 +101,7 @@ export async function GET() {
       
       // Test with a simple completion
       const completion = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: "gpt-5-2025-08-07",
         messages: [
           {
             role: "user",

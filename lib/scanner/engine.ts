@@ -534,7 +534,7 @@ Focus on actual legal precedents and business consequences.`;
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: "gpt-5",
+        model: "gpt-5-2025-08-07",
         messages: [
           {
             role: "system",
