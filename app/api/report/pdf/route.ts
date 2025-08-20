@@ -489,7 +489,7 @@ export async function GET(req: NextRequest) {
     await browser.close();
 
     // Return PDF
-    return new NextResponse(pdf, {
+    return new NextResponse(pdf as Buffer, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="ada-report-${scanData.domain}-${new Date().toISOString().split('T')[0]}.pdf"`
