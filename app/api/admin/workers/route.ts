@@ -62,10 +62,10 @@ export async function GET(req: NextRequest) {
           lastHeartbeatAgo: Math.floor((Date.now() - new Date(w.last_heartbeat).getTime()) / 1000)
         }))
       },
-      queue: queueStats.data,
+      queue: queueStats,
       health: {
         overallStatus: activeWorkers.length > 0 ? 'healthy' : 'warning',
-        queueBacklog: queueStats.data.queued + queueStats.data.claimed + queueStats.data.processing,
+        queueBacklog: queueStats.queued + queueStats.claimed + queueStats.processing,
         throughput: activeWorkers.reduce((sum, w) => sum + (w.jobs_processed || 0), 0)
       }
     });
