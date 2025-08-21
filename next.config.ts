@@ -2,9 +2,10 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   experimental: {
-    ppr: true,
-    clientSegmentCache: true,
-    nodeMiddleware: true
+    // PPR only available in canary, removed for stable builds
+    // ppr: true,
+    // clientSegmentCache: true,
+    // nodeMiddleware: true
   }
 };
 
