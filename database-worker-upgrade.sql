@@ -140,3 +140,68 @@ $$;
 GRANT EXECUTE ON FUNCTION claim_next_job TO service_role;
 GRANT EXECUTE ON FUNCTION complete_job TO service_role;
 GRANT EXECUTE ON FUNCTION fail_job TO service_role;
+
+-- Page view metering for Stripe tier enforcement
+CREATE OR REPLACE FUNCTION increment_page_views(p_team_id INTEGER, p_amount INTEGER DEFAULT 1)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  -- Reset daily counter if needed
+  UPDATE teams 
+  SET updated_at = NOW()
+  WHERE id = p_team_id 
+    AND (updated_at::date < CURRENT_DATE);
+    
+  -- Increment page views
+  UPDATE teams
+  SET updated_at = NOW()
+  WHERE id = p_team_id;
+  
+  -- Insert usage event for billing tracking
+  INSERT INTO usage_events (team_id, event_type, count, metadata, created_at)
+  VALUES (p_team_id, 'page_scan', p_amount, '{"source": "api"}', NOW());
+END;
+$$;
+
+-- Enforce free tier limits (100 scans per day)
+CREATE OR REPLACE FUNCTION enforce_free_tier_limits()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  daily_scans INTEGER;
+  team_plan TEXT;
+BEGIN
+  -- Get team plan
+  SELECT plan_name INTO team_plan 
+  FROM teams 
+  WHERE id = NEW.team_id;
+  
+  -- Check free tier limits
+  IF team_plan = 'free' OR team_plan IS NULL THEN
+    -- Count scans today
+    SELECT COUNT(*) INTO daily_scans
+    FROM scans 
+    WHERE team_id = NEW.team_id 
+      AND created_at::date = CURRENT_DATE;
+      
+    IF daily_scans >= 100 THEN
+      RAISE EXCEPTION 'Free tier daily scan limit (100) exceeded. Please upgrade your plan.';
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- Apply trigger to scans table
+DROP TRIGGER IF EXISTS enforce_free_limits_trigger ON scans;
+CREATE TRIGGER enforce_free_limits_trigger
+  BEFORE INSERT ON scans
+  FOR EACH ROW
+  EXECUTE FUNCTION enforce_free_tier_limits();
+
+-- Grant permissions
+GRANT EXECUTE ON FUNCTION increment_page_views TO service_role;
+GRANT EXECUTE ON FUNCTION enforce_free_tier_limits TO service_role;
