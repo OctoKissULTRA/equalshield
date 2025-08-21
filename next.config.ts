@@ -19,26 +19,19 @@ const nextConfig: NextConfig = {
     const stripeHooks = "hooks.stripe.com";
 
     const csp = [
-      // Baseline
       "default-src 'self';",
-      // Next needs inline styles (emotion/tailwind) & Google Fonts if used
-      "style-src 'self' 'unsafe-inline' https:;",
+      "style-src 'self' 'unsafe-inline' blob: https:;",  // allow inline + blob for Next CSS chunks
       "font-src 'self' data: https: fonts.gstatic.com;",
-      "img-src 'self' data: blob: https:;",
-      // Scripts: Next chunks, Vercel analytics, (optional) Sentry CDN, Stripe
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https: " +
+      "img-src 'self' data: blob: https:;",  // fix missing icons/images
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https: " +  // Next needs unsafe-inline/eval for hydration
         `${vercelInsights} ${stripeJs};`,
-      // XHR/WebSocket destinations: Supabase, Sentry ingest, Stripe, Vercel, your APIs
-      "connect-src 'self' https: wss: " +
+      "connect-src 'self' https: wss: " +  // Supabase, Stripe, Sentry
         `${supabaseHost ? `https://${supabaseHost} wss://${supabaseHost}` : ""} ` +
         `${sentryIngest} ${stripeApi} ${vercelInsights};`,
-      // Frames: allow Stripe checkout if embedded
-      `frame-src 'self' https://${stripeJs} https://${stripeHooks};`,
-      // Lock down the rest
+      "frame-src 'self' https://${stripeJs} https://${stripeHooks};",
       "object-src 'none';",
       "base-uri 'self';",
       "form-action 'self' https://checkout.stripe.com;",
-      // Optional: stop clickjacking (can keep DENY; Stripe redirects are top-level)
       "frame-ancestors 'none';",
     ].join(" ");
 
