@@ -20,15 +20,34 @@ const nextConfig: NextConfig = {
 
     const csp = [
       "default-src 'self';",
-      "style-src 'self' 'unsafe-inline' blob: https:;",  // allow inline + blob for Next CSS chunks
-      "font-src 'self' data: https: fonts.gstatic.com;",
-      "img-src 'self' data: blob: https:;",  // fix missing icons/images
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https: " +  // Next needs unsafe-inline/eval for hydration
+
+      // ✅ Styles & fonts (Tailwind + Google Fonts + inline style tags + blob CSS)
+      "style-src 'self' 'unsafe-inline' blob: https: https://fonts.googleapis.com;",
+      "font-src 'self' data: https: https://fonts.gstatic.com;",
+
+      // ✅ Images/icons (local, data:, blob:, remote)
+      "img-src 'self' data: blob: https:;",
+
+      // ✅ Scripts (Next chunks + hydration + analytics + Stripe)
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https: " +
         `${vercelInsights} ${stripeJs};`,
-      "connect-src 'self' https: wss: " +  // Supabase, Stripe, Sentry
+
+      // ✅ XHR/WebSocket (Supabase, Sentry, Stripe, Vercel)
+      "connect-src 'self' https: wss: " +
         `${supabaseHost ? `https://${supabaseHost} wss://${supabaseHost}` : ""} ` +
         `${sentryIngest} ${stripeApi} ${vercelInsights};`,
-      "frame-src 'self' https://${stripeJs} https://${stripeHooks};",
+
+      // ✅ Workers (Next can use blob workers)
+      "worker-src 'self' blob:;",
+
+      // ✅ Manifests & prefetch (harmless)
+      "manifest-src 'self';",
+      "prefetch-src 'self' https:;",
+
+      // Frames for Stripe only
+      `frame-src 'self' https://${stripeJs} https://${stripeHooks};`,
+
+      // Lock down the rest
       "object-src 'none';",
       "base-uri 'self';",
       "form-action 'self' https://checkout.stripe.com;",
