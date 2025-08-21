@@ -19,32 +19,32 @@ const nextConfig: NextConfig = {
     const stripeHooks = "hooks.stripe.com";
 
     const csp = [
-      "default-src 'self';",
+      "default-src 'self' data: blob: https:;", // allow self + remote assets as a safety net
 
-      // ✅ Styles & fonts (Tailwind + Google Fonts + inline style tags + blob CSS)
+      // Styles & fonts (Tailwind + Next + Google Fonts + blob CSS)
       "style-src 'self' 'unsafe-inline' blob: https: https://fonts.googleapis.com;",
       "font-src 'self' data: https: https://fonts.gstatic.com;",
 
-      // ✅ Images/icons (local, data:, blob:, remote)
+      // Images/icons
       "img-src 'self' data: blob: https:;",
 
-      // ✅ Scripts (Next chunks + hydration + analytics + Stripe)
+      // Scripts (Next chunks + hydration + analytics + Stripe)
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https: " +
         `${vercelInsights} ${stripeJs};`,
 
-      // ✅ XHR/WebSocket (Supabase, Sentry, Stripe, Vercel)
+      // XHR/WebSocket (Supabase, Sentry, Stripe, Vercel)
       "connect-src 'self' https: wss: " +
         `${supabaseHost ? `https://${supabaseHost} wss://${supabaseHost}` : ""} ` +
         `${sentryIngest} ${stripeApi} ${vercelInsights};`,
 
-      // ✅ Workers (Next can use blob workers)
+      // Workers (Next can use blob workers)
       "worker-src 'self' blob:;",
 
-      // ✅ Manifests & prefetch (harmless)
+      // Manifests/prefetch
       "manifest-src 'self';",
       "prefetch-src 'self' https:;",
 
-      // Frames for Stripe only
+      // Frames for Stripe
       `frame-src 'self' https://${stripeJs} https://${stripeHooks};`,
 
       // Lock down the rest
