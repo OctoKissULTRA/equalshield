@@ -6,6 +6,22 @@
     {
       "path": "/api/cron/schedule-daily",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/self-scan",
+      "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/cron/publish-sample", 
+      "schedule": "0 10 * * 1"
+    },
+    {
+      "path": "/api/cron/cleanup-trials",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-tokens",
+      "schedule": "0 3 * * *"
     }
   ]
 }

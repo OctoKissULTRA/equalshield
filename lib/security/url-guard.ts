@@ -117,24 +117,24 @@ export async function validateScanUrl(url: string): Promise<{ valid: boolean; er
 // Crawl budget configuration per tier
 export const CRAWL_LIMITS = {
   free: {
-    maxPages: 3,
+    maxPages: 5,
     maxDepth: 1,
-    maxTimeMs: 30000,
+    maxTimeMs: 120000, // 2 minutes
   },
   starter: {
-    maxPages: 10,
+    maxPages: 15,
     maxDepth: 2,
-    maxTimeMs: 60000,
+    maxTimeMs: 180000, // 3 minutes
   },
   pro: {
     maxPages: 50,
     maxDepth: 3,
-    maxTimeMs: 180000,
+    maxTimeMs: 300000, // 5 minutes
   },
   enterprise: {
     maxPages: 500,
     maxDepth: 5,
-    maxTimeMs: 600000,
+    maxTimeMs: 600000, // 10 minutes
   },
 } as const;
 

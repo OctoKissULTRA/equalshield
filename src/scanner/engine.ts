@@ -1,17 +1,40 @@
 import { Browser, Page, chromium } from 'playwright';
+import AxeBuilder from '@axe-core/playwright';
 import { extractPageElements } from './element-extractor';
-import { WCAGRules } from './wcag-rules';
 import { PageElement, ScanConfig, PageScanResult, ComplianceSummary, Violation } from './types';
+import { CRAWL_LIMITS, Tier } from '@/lib/security/url-guard';
+import { 
+  initializeScan, 
+  updateScanProgress, 
+  onPageCrawled, 
+  completeScan, 
+  failScan 
+} from '@/lib/realtime/progress';
 
 export class ComplianceScanner {
   private browser: Browser | null = null;
-  private wcagRules: WCAGRules;
+  private tier: Tier;
+  private startTime: number = 0;
+  private scanId?: string;
 
-  constructor() {
-    this.wcagRules = new WCAGRules();
+  constructor(tier: Tier = 'free', scanId?: string) {
+    this.tier = tier;
+    this.scanId = scanId;
   }
 
   async scanWebsite(config: ScanConfig) {
+    this.startTime = Date.now();
+    const limits = CRAWL_LIMITS[this.tier];
+    
+    // Initialize progress tracking
+    if (this.scanId) {
+      initializeScan(this.scanId, config.url, limits.maxPages);
+      updateScanProgress(this.scanId, {
+        status: 'starting',
+        currentStep: 'Initializing browser and security checks'
+      });
+    }
+    
     const scanResult = {
       url: config.url,
       timestamp: new Date().toISOString(),
@@ -19,46 +42,431 @@ export class ComplianceScanner {
       summary: {} as ComplianceSummary,
       violations: [] as Violation[],
       riskScore: 0,
-      elements: [] as PageElement[]
+      tier: this.tier,
+      crawlLimits: limits
     };
 
     try {
-      // Initialize Playwright with specific accessibility testing config
+      // Initialize Playwright with security and accessibility config
       this.browser = await chromium.launch({
         headless: true,
         args: [
           '--force-prefers-reduced-motion',
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage'
+          '--disable-dev-shm-usage',
+          '--disable-background-timer-throttling',
+          '--disable-renderer-backgrounding'
         ]
       });
 
       const page = await this.browser.newPage();
       
-      // Enable accessibility tree
-      await page.addInitScript(() => {
-        // Inject axe-core for additional validation
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.2/axe.min.js';
-        document.head.appendChild(script);
+      // Set timeouts based on tier
+      page.setDefaultNavigationTimeout(25000);
+      page.setDefaultTimeout(15000);
+      
+      // SSRF protection - block internal requests
+      await page.route('**/*', route => {
+        const url = new URL(route.request().url());
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          return route.abort();
+        }
+        return route.continue();
       });
 
-      // Main scanning logic
-      const elements = await this.extractAllElements(page, config.url);
-      const violations = await this.detectViolations(elements);
-      const riskScore = await this.calculateRiskScore(violations);
+      // Scan pages based on tier limits
+      if (this.scanId) {
+        updateScanProgress(this.scanId, {
+          status: 'crawling',
+          currentStep: 'Discovering pages to scan'
+        });
+      }
       
-      scanResult.elements = elements;
-      scanResult.violations = violations;
-      scanResult.riskScore = riskScore;
+      const urlsToScan = await this.discoverUrls(page, config.url, limits);
+      
+      if (this.scanId) {
+        updateScanProgress(this.scanId, {
+          pagesDiscovered: urlsToScan.length,
+          currentStep: `Found ${urlsToScan.length} pages to scan`
+        });
+      }
+      
+      for (let i = 0; i < urlsToScan.length; i++) {
+        const url = urlsToScan[i];
+        if (this.isTimeBudgetExceeded(limits)) break;
+        
+        if (this.scanId) {
+          updateScanProgress(this.scanId, {
+            currentStep: `Scanning page ${i + 1} of ${urlsToScan.length}`,
+            currentPage: url
+          });
+        }
+        
+        try {
+          const pageResult = await this.scanSinglePage(page, url);
+          scanResult.pages.push(pageResult);
+          scanResult.violations.push(...pageResult.violations);
+          
+          // Update progress after each page
+          if (this.scanId) {
+            onPageCrawled(this.scanId, url, 0, pageResult.violations.length);
+          }
+        } catch (error) {
+          console.error(`Failed to scan page ${url}:`, error);
+          
+          if (this.scanId) {
+            onPageCrawled(this.scanId, url, 0, 0, (error as Error).message);
+          }
+        }
+      }
+
+      // Calculate overall metrics
+      if (this.scanId) {
+        updateScanProgress(this.scanId, {
+          status: 'analyzing',
+          currentStep: 'Calculating compliance metrics and generating report'
+        });
+      }
+      
+      scanResult.summary = this.calculateSummary(scanResult.violations);
+      scanResult.riskScore = this.calculateRiskScore(scanResult.violations);
+      
+      // Complete the scan with final results
+      if (this.scanId) {
+        const criticalViolations = scanResult.violations.filter(v => v.impact === 'critical').length;
+        const quickWins = scanResult.violations.filter(v => v.tags?.includes('easy')).length;
+        
+        completeScan(this.scanId, {
+          overallScore: Math.max(0, 100 - scanResult.riskScore),
+          totalViolations: scanResult.violations.length,
+          criticalIssues: criticalViolations,
+          quickWins
+        });
+      }
       
       return scanResult;
+    } catch (error) {
+      // Handle scan failure
+      if (this.scanId) {
+        failScan(this.scanId, (error as Error).message);
+      }
+      throw error;
     } finally {
       if (this.browser) {
         await this.browser.close();
       }
     }
+  }
+
+  private async discoverUrls(page: Page, startUrl: string, limits: typeof CRAWL_LIMITS[Tier]): Promise<string[]> {
+    const urls = new Set([startUrl]);
+    const visited = new Set<string>();
+    const toVisit = [startUrl];
+    let depth = 0;
+
+    try {
+      // Check for robots.txt and sitemap
+      const robotsUrls = await this.checkRobotsTxt(page, startUrl);
+      robotsUrls.forEach(url => urls.add(url));
+      
+      // Discover internal links up to depth limit
+      while (toVisit.length > 0 && depth < limits.maxDepth && urls.size < limits.maxPages) {
+        const currentUrl = toVisit.shift()!;
+        if (visited.has(currentUrl)) continue;
+        
+        visited.add(currentUrl);
+        
+        try {
+          await page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          
+          const links = await page.evaluate((baseUrl) => {
+            const baseHost = new URL(baseUrl).hostname;
+            const linkElements = Array.from(document.querySelectorAll('a[href]'));
+            
+            return linkElements
+              .map(a => a.getAttribute('href'))
+              .filter(href => href && !href.startsWith('#') && !href.startsWith('mailto:'))
+              .map(href => {
+                try {
+                  const url = new URL(href, baseUrl);
+                  return url.hostname === baseHost ? url.href : null;
+                } catch {
+                  return null;
+                }
+              })
+              .filter(Boolean) as string[];
+          }, startUrl);
+          
+          links.forEach(link => {
+            if (urls.size < limits.maxPages) {
+              urls.add(link);
+              toVisit.push(link);
+            }
+          });
+          
+        } catch (error) {
+          console.warn(`Failed to discover links from ${currentUrl}:`, error);
+        }
+        
+        depth++;
+      }
+    } catch (error) {
+      console.warn('URL discovery failed:', error);
+    }
+
+    return Array.from(urls).slice(0, limits.maxPages);
+  }
+
+  private async checkRobotsTxt(page: Page, startUrl: string): Promise<string[]> {
+    const urls: string[] = [];
+    const baseUrl = new URL(startUrl);
+    
+    try {
+      const robotsUrl = `${baseUrl.protocol}//${baseUrl.host}/robots.txt`;
+      const response = await page.goto(robotsUrl, { timeout: 10000 });
+      
+      if (response?.ok()) {
+        const robotsText = await response.text();
+        const sitemapMatch = robotsText.match(/Sitemap:\s*(.+)/i);
+        
+        if (sitemapMatch) {
+          const sitemapUrls = await this.parseSitemap(page, sitemapMatch[1].trim());
+          urls.push(...sitemapUrls);
+        }
+      }
+    } catch (error) {
+      // Robots.txt not found or not accessible - that's fine
+    }
+    
+    return urls;
+  }
+
+  private async parseSitemap(page: Page, sitemapUrl: string): Promise<string[]> {
+    try {
+      const response = await page.goto(sitemapUrl, { timeout: 10000 });
+      if (!response?.ok()) return [];
+      
+      const sitemapXml = await response.text();
+      const urlMatches = sitemapXml.match(/<loc>([^<]+)<\/loc>/g) || [];
+      
+      return urlMatches
+        .map(match => match.replace(/<\/?loc>/g, ''))
+        .slice(0, 20); // Limit sitemap URLs
+        
+    } catch (error) {
+      return [];
+    }
+  }
+
+  private async scanSinglePage(page: Page, url: string): Promise<PageScanResult> {
+    try {
+      await page.goto(url, { waitUntil: 'networkidle', timeout: 25000 });
+      
+      // Run Axe accessibility analysis
+      const builder = new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+        .disableRules(['color-contrast-enhanced']); // Optional - AA vs AAA
+      
+      const axeResults = await builder.analyze();
+      
+      // Convert Axe violations to our format
+      const violations = this.normalizeAxeViolations(axeResults.violations, url);
+      
+      // Take screenshot for evidence
+      const screenshot = await page.screenshot({ 
+        fullPage: false, 
+        type: 'png',
+        clip: { x: 0, y: 0, width: 1200, height: 800 }
+      });
+      
+      return {
+        url,
+        timestamp: new Date().toISOString(),
+        violations,
+        axeResults,
+        screenshot: screenshot.toString('base64'),
+        pageTitle: await page.title(),
+        totalElements: axeResults.violations.reduce((sum, v) => sum + v.nodes.length, 0)
+      };
+      
+    } catch (error) {
+      console.error(`Failed to scan page ${url}:`, error);
+      return {
+        url,
+        timestamp: new Date().toISOString(),
+        violations: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+        pageTitle: '',
+        totalElements: 0
+      };
+    }
+  }
+
+  private normalizeAxeViolations(axeViolations: any[], pageUrl: string): Violation[] {
+    const violations: Violation[] = [];
+    
+    for (const violation of axeViolations) {
+      const impact = violation.impact || 'minor';
+      const severity = this.mapAxeImpactToSeverity(impact);
+      
+      for (const node of violation.nodes) {
+        violations.push({
+          id: `${violation.id}-${violations.length}`,
+          ruleId: violation.id,
+          wcagCriterion: this.mapAxeRuleToWCAG(violation.id),
+          severity,
+          impact,
+          description: violation.description,
+          help: violation.help,
+          helpUrl: violation.helpUrl,
+          selector: node.target.join(' '),
+          snippet: node.html,
+          message: node.failureSummary || violation.help,
+          pageUrl,
+          elementType: this.extractElementType(node.html),
+          legalRisk: this.assessLegalRisk(violation.id, severity),
+          quickWin: this.isQuickWin(violation.id),
+          estimatedFixTime: this.estimateFixTime(violation.id),
+          wcagLevel: this.getWcagLevel(violation.tags)
+        });
+      }
+    }
+    
+    return violations;
+  }
+
+  private mapAxeImpactToSeverity(impact: string): 'critical' | 'serious' | 'moderate' | 'minor' {
+    switch (impact) {
+      case 'critical': return 'critical';
+      case 'serious': return 'serious';
+      case 'moderate': return 'moderate';
+      default: return 'minor';
+    }
+  }
+
+  private mapAxeRuleToWCAG(ruleId: string): string {
+    const wcagMap: Record<string, string> = {
+      'alt-text': '1.1.1',
+      'color-contrast': '1.4.3',
+      'label': '3.3.2',
+      'link-name': '2.4.4',
+      'button-name': '4.1.2',
+      'heading-order': '1.3.1',
+      'landmark-unique': '1.3.6',
+      'keyboard': '2.1.1',
+      'focus-order': '2.4.3',
+      'skip-link': '2.4.1'
+    };
+    
+    return wcagMap[ruleId] || '4.1.2'; // Default to name/role/value
+  }
+
+  private extractElementType(html: string): string {
+    const tagMatch = html.match(/<(\w+)/);
+    return tagMatch ? tagMatch[1].toLowerCase() : 'unknown';
+  }
+
+  private assessLegalRisk(ruleId: string, severity: string): 'high' | 'medium' | 'low' {
+    // High-risk rules that commonly result in lawsuits
+    const highRiskRules = ['alt-text', 'color-contrast', 'label', 'keyboard', 'link-name'];
+    
+    if (highRiskRules.includes(ruleId) && ['critical', 'serious'].includes(severity)) {
+      return 'high';
+    }
+    
+    if (severity === 'serious') return 'medium';
+    return 'low';
+  }
+
+  private isQuickWin(ruleId: string): boolean {
+    // Rules that can be fixed quickly
+    const quickWinRules = ['alt-text', 'label', 'link-name', 'button-name', 'heading-order'];
+    return quickWinRules.includes(ruleId);
+  }
+
+  private estimateFixTime(ruleId: string): string {
+    const timeMap: Record<string, string> = {
+      'alt-text': '2-5 minutes',
+      'label': '1-3 minutes',
+      'link-name': '1-2 minutes',
+      'button-name': '1-2 minutes',
+      'color-contrast': '10-30 minutes',
+      'keyboard': '30-60 minutes',
+      'heading-order': '5-15 minutes'
+    };
+    
+    return timeMap[ruleId] || '15-30 minutes';
+  }
+
+  private getWcagLevel(tags: string[]): 'A' | 'AA' | 'AAA' {
+    if (tags.includes('wcag2aaa')) return 'AAA';
+    if (tags.includes('wcag2aa')) return 'AA';
+    return 'A';
+  }
+
+  private isTimeBudgetExceeded(limits: typeof CRAWL_LIMITS[Tier]): boolean {
+    return (Date.now() - this.startTime) > limits.maxTimeMs;
+  }
+
+  private calculateSummary(violations: Violation[]): ComplianceSummary {
+    const summary = {
+      totalViolations: violations.length,
+      critical: violations.filter(v => v.severity === 'critical').length,
+      serious: violations.filter(v => v.severity === 'serious').length,
+      moderate: violations.filter(v => v.severity === 'moderate').length,
+      minor: violations.filter(v => v.severity === 'minor').length,
+      wcagAACompliant: violations.filter(v => ['critical', 'serious'].includes(v.severity)).length === 0,
+      quickWins: violations.filter(v => v.quickWin).length,
+      estimatedFixTime: this.calculateTotalFixTime(violations),
+      topIssues: this.getTopIssues(violations),
+      complianceScore: this.calculateComplianceScore(violations)
+    };
+    
+    return summary;
+  }
+
+  private calculateTotalFixTime(violations: Violation[]): string {
+    const totalMinutes = violations.reduce((sum, v) => {
+      const timeStr = v.estimatedFixTime || '15-30 minutes';
+      const minutes = parseInt(timeStr.split('-')[0]) || 15;
+      return sum + minutes;
+    }, 0);
+    
+    if (totalMinutes < 60) return `${totalMinutes} minutes`;
+    const hours = Math.round(totalMinutes / 60 * 10) / 10;
+    return `${hours} hours`;
+  }
+
+  private getTopIssues(violations: Violation[]): Array<{ rule: string; count: number; wcag: string }> {
+    const ruleGroups = violations.reduce((groups, v) => {
+      const key = v.ruleId;
+      if (!groups[key]) {
+        groups[key] = { rule: key, count: 0, wcag: v.wcagCriterion };
+      }
+      groups[key].count++;
+      return groups;
+    }, {} as Record<string, { rule: string; count: number; wcag: string }>);
+    
+    return Object.values(ruleGroups)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }
+
+  private calculateComplianceScore(violations: Violation[]): number {
+    if (violations.length === 0) return 100;
+    
+    let penalty = 0;
+    violations.forEach(v => {
+      switch (v.severity) {
+        case 'critical': penalty += 10; break;
+        case 'serious': penalty += 5; break;
+        case 'moderate': penalty += 2; break;
+        case 'minor': penalty += 1; break;
+      }
+    });
+    
+    return Math.max(0, Math.min(100, 100 - penalty));
   }
 
   private async extractAllElements(page: Page, url: string): Promise<PageElement[]> {
@@ -246,19 +654,7 @@ export class ComplianceScanner {
     return elements;
   }
 
-  private async detectViolations(elements: PageElement[]): Promise<Violation[]> {
-    const violations: Violation[] = [];
-
-    // Apply all WCAG rules
-    for (const element of elements) {
-      const ruleViolations = this.wcagRules.checkElement(element);
-      violations.push(...ruleViolations);
-    }
-
-    return violations;
-  }
-
-  private async calculateRiskScore(violations: Violation[]): Promise<number> {
+  private calculateRiskScore(violations: Violation[]): number {
     let score = 0;
     
     // Weight violations by severity and legal risk

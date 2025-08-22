@@ -1,0 +1,170 @@
+name: Marketing Quality Gate
+on: 
+  pull_request:
+    paths:
+      - 'app/(marketing)/**'
+      - 'app/page.tsx'
+      - 'components/ui/**'
+      - '.github/workflows/marketing.yml'
+
+jobs:
+  lighthouse-audit:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Build application
+        run: pnpm build
+        env:
+          # Provide minimal env vars for build
+          NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder"
+          SUPABASE_SERVICE_ROLE_KEY: "placeholder"
+          
+      - name: Start application
+        run: |
+          pnpm start &
+          sleep 10
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder"
+          SUPABASE_SERVICE_ROLE_KEY: "placeholder"
+          
+      - name: Wait for application to be ready
+        run: |
+          timeout 30 bash -c 'until curl -s http://localhost:3000 > /dev/null; do sleep 1; done'
+          
+      - name: Audit homepage
+        run: |
+          npx -y lighthouse http://localhost:3000 \
+            --quiet \
+            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
+            --output=json \
+            --output-path=./lighthouse-home.json
+            
+      - name: Audit trust page
+        run: |
+          npx -y lighthouse http://localhost:3000/trust \
+            --quiet \
+            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
+            --output=json \
+            --output-path=./lighthouse-trust.json
+            
+      - name: Audit trial page
+        run: |
+          npx -y lighthouse http://localhost:3000/trial \
+            --quiet \
+            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
+            --output=json \
+            --output-path=./lighthouse-trial.json
+            
+      - name: Enforce accessibility scores
+        run: |
+          echo "=== Homepage Accessibility Score ==="
+          HOME_SCORE=$(jq '.categories.accessibility.score' < lighthouse-home.json)
+          echo "Score: $HOME_SCORE (required: >= 0.95)"
+          
+          echo "=== Trust Page Accessibility Score ==="
+          TRUST_SCORE=$(jq '.categories.accessibility.score' < lighthouse-trust.json)
+          echo "Score: $TRUST_SCORE (required: >= 0.95)"
+          
+          echo "=== Trial Page Accessibility Score ==="
+          TRIAL_SCORE=$(jq '.categories.accessibility.score' < lighthouse-trial.json)
+          echo "Score: $TRIAL_SCORE (required: >= 0.95)"
+          
+          # Check if all scores meet minimum threshold
+          awk -v home="$HOME_SCORE" -v trust="$TRUST_SCORE" -v trial="$TRIAL_SCORE" '
+          BEGIN { 
+            required = 0.95
+            pass = 1
+            
+            if (home < required) {
+              print "❌ Homepage accessibility score " home " is below required " required
+              pass = 0
+            } else {
+              print "✅ Homepage accessibility score " home " meets requirement"
+            }
+            
+            if (trust < required) {
+              print "❌ Trust page accessibility score " trust " is below required " required  
+              pass = 0
+            } else {
+              print "✅ Trust page accessibility score " trust " meets requirement"
+            }
+            
+            if (trial < required) {
+              print "❌ Trial page accessibility score " trial " is below required " required
+              pass = 0  
+            } else {
+              print "✅ Trial page accessibility score " trial " meets requirement"
+            }
+            
+            if (pass == 0) {
+              print ""
+              print "🚫 Marketing quality gate FAILED"
+              print "All marketing pages must have accessibility scores >= " required
+              exit 1
+            } else {
+              print ""
+              print "🎉 Marketing quality gate PASSED"
+              print "All pages meet accessibility requirements"
+            }
+          }'
+          
+      - name: Check for console errors
+        run: |
+          echo "=== Checking for console errors ==="
+          
+          # Extract console errors from Lighthouse reports
+          HOME_ERRORS=$(jq -r '.audits["errors-in-console"].details.items | length' < lighthouse-home.json)
+          TRUST_ERRORS=$(jq -r '.audits["errors-in-console"].details.items | length' < lighthouse-trust.json)
+          TRIAL_ERRORS=$(jq -r '.audits["errors-in-console"].details.items | length' < lighthouse-trial.json)
+          
+          echo "Homepage console errors: $HOME_ERRORS"
+          echo "Trust page console errors: $TRUST_ERRORS" 
+          echo "Trial page console errors: $TRIAL_ERRORS"
+          
+          # Allow up to 2 minor console errors (warnings, etc.)
+          TOTAL_ERRORS=$((HOME_ERRORS + TRUST_ERRORS + TRIAL_ERRORS))
+          if [ "$TOTAL_ERRORS" -gt 2 ]; then
+            echo "❌ Too many console errors: $TOTAL_ERRORS (max allowed: 2)"
+            echo "Review console output and fix blocking errors"
+            exit 1
+          else
+            echo "✅ Console errors within acceptable range: $TOTAL_ERRORS"
+          fi
+          
+      - name: Performance summary
+        run: |
+          echo "=== Performance Summary ==="
+          HOME_PERF=$(jq '.categories.performance.score' < lighthouse-home.json)
+          TRUST_PERF=$(jq '.categories.performance.score' < lighthouse-trust.json)
+          TRIAL_PERF=$(jq '.categories.performance.score' < lighthouse-trial.json)
+          
+          echo "Homepage performance: $HOME_PERF"
+          echo "Trust page performance: $TRUST_PERF"
+          echo "Trial page performance: $TRIAL_PERF"
+          
+          # Performance is informational only (not blocking)
+          echo "ℹ️ Performance scores are informational and do not block the build"
+          
+      - name: Upload Lighthouse reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: lighthouse-*.json
+          retention-days: 30

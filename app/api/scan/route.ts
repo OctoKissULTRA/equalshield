@@ -8,6 +8,8 @@ import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { rateLimitCheck, getClientIdentifier, rateLimitedResponse } from '@/lib/security/rate-limit';
 import { validateScanUrl } from '@/lib/security/url-guard';
+import { checkScanLimits, incrementUsage } from '@/lib/entitlements';
+import { trackScanStarted, trackBlockedUrl } from '@/lib/analytics/events';
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,6 +34,9 @@ export async function POST(req: NextRequest) {
     // SSRF protection - validate URL is public and safe
     const urlValidation = await validateScanUrl(url);
     if (!urlValidation.valid) {
+      // Track blocked URL for analytics
+      trackBlockedUrl(url, urlValidation.error || 'SSRF protection', clientId);
+      
       return NextResponse.json(
         { error: urlValidation.error },
         { status: 400, headers }
@@ -60,9 +65,47 @@ export async function POST(req: NextRequest) {
       }).returning({ id: teams.id });
       
       orgId = newOrg[0].id.toString();
+      
+      // TODO: Create default entitlements for new org
+      // await entitlementsService.createDefaultEntitlements(orgId);
     } else {
       orgId = orgResult[0].id.toString();
     }
+
+    // Check entitlements and usage limits
+    const usageLimits = await checkScanLimits(orgId);
+    
+    if (!usageLimits.canScan) {
+      const errorMessages = {
+        'scan_limit_exceeded': `Monthly scan limit exceeded. You've used all ${usageLimits.scansRemaining} scans for this billing period.`,
+        'subscription_expired': 'Your subscription has expired. Please update your billing information.',
+        'subscription_inactive': 'Your subscription is inactive. Please contact support.'
+      };
+      
+      const message = errorMessages[usageLimits.reasonCode || 'scan_limit_exceeded'] || 'Scan limit exceeded';
+      
+      return NextResponse.json({
+        error: message,
+        code: usageLimits.reasonCode,
+        upgradeUrl: usageLimits.upgradeUrl,
+        scansRemaining: usageLimits.scansRemaining
+      }, { 
+        status: 402, // Payment Required
+        headers 
+      });
+    }
+
+    // Enforce pages per scan limit based on tier
+    const maxPagesForTier = usageLimits.pagesPerScan;
+    
+    // Map depth to expected page count (these are estimates)
+    const depthToPages = {
+      'quick': Math.min(1, maxPagesForTier),
+      'standard': Math.min(5, maxPagesForTier), 
+      'deep': maxPagesForTier
+    };
+    
+    const expectedPages = depthToPages[depth as keyof typeof depthToPages];
 
     // Create scan record first, then enqueue job
     const supabase = createSupabaseClient();
@@ -88,7 +131,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Enqueue job with scan_id reference
+    // Increment usage atomically
+    try {
+      await incrementUsage(orgId, 1, 0); // 1 scan, 0 pages initially (pages will be updated when scan completes)
+    } catch (usageError) {
+      console.error('Failed to increment usage:', usageError);
+      // Continue anyway - don't block scan for usage tracking failures
+    }
+
+    // Track scan started for analytics
+    trackScanStarted(scan.id, url, tier, orgId);
+    
+    // Initialize progress tracking
+    const { initializeScan } = await import('@/lib/realtime/progress');
+    initializeScan(scan.id, url, expectedPages);
+
+    // Enqueue job with scan_id reference and tier-based priority
     const { data: job, error: jobError } = await supabase
       .from('scan_jobs')
       .insert({
@@ -96,7 +154,8 @@ export async function POST(req: NextRequest) {
         org_id: orgId,
         url,
         depth,
-        priority: tier === 'free' ? 10 : tier === 'professional' ? 5 : 1
+        priority: tier === 'free' ? 10 : tier === 'professional' ? 5 : 1,
+        max_pages: expectedPages // Pass the tier-based page limit to the worker
       })
       .select('id')
       .single();
