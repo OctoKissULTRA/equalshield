@@ -3,9 +3,19 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseClient } from '@/lib/supabase/server';
+import { requireAdmin, forbiddenResponse, logAdminAction } from '@/lib/auth/guards';
 
 export async function GET(req: NextRequest) {
   try {
+    // Require admin authentication
+    const user = await requireAdmin(req).catch(() => null);
+    if (!user) {
+      return forbiddenResponse('Admin access required');
+    }
+    
+    // Log admin action
+    await logAdminAction(user, 'view_worker_status');
+    
     const supabase = createSupabaseClient();
 
     // Get worker heartbeats

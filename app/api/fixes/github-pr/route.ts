@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { scans, violations } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { requireOrgMember, forbiddenResponse } from '@/lib/auth/guards';
 
 interface GitHubRepo {
   owner: string;
@@ -262,14 +263,34 @@ class FixGenerator {
 
 export async function POST(req: NextRequest) {
   try {
-    const { scanId, repoUrl, githubToken, framework = 'react' } = await req.json();
+    // Require authenticated org member
+    const user = await requireOrgMember('', req).catch(() => null);
+    if (!user) {
+      return forbiddenResponse('Organization membership required');
+    }
     
-    if (!scanId || !repoUrl || !githubToken) {
+    const { scanId, repoUrl, framework = 'react' } = await req.json();
+    
+    // SECURITY: Remove githubToken from request body - use GitHub App instead
+    if (!scanId || !repoUrl) {
       return NextResponse.json(
-        { error: 'scanId, repoUrl, and githubToken are required' },
+        { error: 'scanId and repoUrl are required' },
         { status: 400 }
       );
     }
+    
+    // TODO: Implement GitHub App flow
+    // 1. Verify user has GitHub App installed on their org
+    // 2. Exchange app credentials for installation token
+    // 3. Use short-lived token for PR creation
+    
+    return NextResponse.json(
+      { 
+        error: 'GitHub PR creation temporarily disabled. GitHub App integration required for security.',
+        todo: 'Implement GitHub App authentication flow'
+      },
+      { status: 501 }
+    );
 
     // Parse GitHub repo URL
     const repoMatch = repoUrl.match(/github\\.com\/([^\/]+)\/([^\/]+)/);

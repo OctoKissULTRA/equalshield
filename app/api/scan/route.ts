@@ -6,12 +6,18 @@ import { createSupabaseClient } from '@/lib/supabase/server';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { scanRateLimiter, withRateLimit } from '@/lib/utils/rate-limit';
+import { rateLimitCheck, getClientIdentifier, rateLimitedResponse } from '@/lib/security/rate-limit';
+import { validateScanUrl } from '@/lib/security/url-guard';
 
 export async function POST(req: NextRequest) {
   try {
     // Apply rate limiting
-    const rateLimitHeaders = withRateLimit(scanRateLimiter)(req);
+    const clientId = await getClientIdentifier(req);
+    const { success, remaining, reset, headers } = await rateLimitCheck(clientId, 'free');
+    
+    if (!success) {
+      return rateLimitedResponse(remaining, reset);
+    }
     
     const { url, email, depth = 'standard', tier = 'free' } = await req.json();
     
@@ -19,17 +25,16 @@ export async function POST(req: NextRequest) {
     if (!url || !email) {
       return NextResponse.json(
         { error: 'URL and email are required' },
-        { status: 400 }
+        { status: 400, headers }
       );
     }
 
-    // Validate URL
-    try {
-      new URL(url);
-    } catch {
+    // SSRF protection - validate URL is public and safe
+    const urlValidation = await validateScanUrl(url);
+    if (!urlValidation.valid) {
       return NextResponse.json(
-        { error: 'Invalid URL format' },
-        { status: 400 }
+        { error: urlValidation.error },
+        { status: 400, headers }
       );
     }
 
@@ -59,11 +64,35 @@ export async function POST(req: NextRequest) {
       orgId = orgResult[0].id.toString();
     }
 
-    // Enqueue job using Supabase job queue
+    // Create scan record first, then enqueue job
     const supabase = createSupabaseClient();
-    const { data: job, error } = await supabase
+    
+    // Create scan with UUID primary key
+    const { data: scan, error: scanError } = await supabase
+      .from('scans')
+      .insert({
+        url,
+        org_id: orgId,
+        email,
+        depth,
+        status: 'pending'
+      })
+      .select('id')
+      .single();
+
+    if (scanError) {
+      console.error('Scan creation error:', scanError);
+      return NextResponse.json(
+        { error: 'Failed to create scan record' },
+        { status: 500, headers }
+      );
+    }
+
+    // Enqueue job with scan_id reference
+    const { data: job, error: jobError } = await supabase
       .from('scan_jobs')
       .insert({
+        scan_id: scan.id,
         org_id: orgId,
         url,
         depth,
@@ -72,25 +101,25 @@ export async function POST(req: NextRequest) {
       .select('id')
       .single();
 
-    if (error) {
-      console.error('Job queue error:', error);
+    if (jobError) {
+      console.error('Job queue error:', jobError);
       return NextResponse.json(
         { error: 'Failed to queue scan job' },
-        { status: 500, headers: rateLimitHeaders }
+        { status: 500, headers }
       );
     }
 
-    // Return job ID for status polling
+    // Return scanId (UUID) for status polling
     const estimatedTime = depth === 'quick' ? '30 seconds' : depth === 'standard' ? '2 minutes' : '5 minutes';
     
     return NextResponse.json({
       success: true,
-      jobId: job.id,
+      scanId: scan.id, // Return UUID scanId instead of jobId
       message: 'Scan queued successfully. Processing will begin shortly.',
-      statusUrl: `/api/scan/job/${job.id}`,
+      statusUrl: `/api/scan/${scan.id}`,
       estimatedTime
     }, {
-      headers: rateLimitHeaders
+      headers
     });
 
   } catch (error) {
