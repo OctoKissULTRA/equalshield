@@ -1,0 +1,84 @@
+name: Environment Validation
+on:
+  pull_request:
+    paths:
+      - 'lib/config/env.ts'
+      - '.env.example'
+      - 'scripts/check-env.ts'
+      - '.github/workflows/env-validation.yml'
+  push:
+    branches: [main]
+
+jobs:
+  validate-env-schema:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Validate schema compilation
+        run: npx tsc lib/config/env.ts --noEmit --skipLibCheck
+        
+      - name: Test environment checker with minimal config
+        run: npm run env:check
+        env:
+          NODE_ENV: test
+          NEXT_PUBLIC_SUPABASE_URL: https://test.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: test-service-key
+          STRIPE_SECRET_KEY: sk_test_minimal
+          STRIPE_WEBHOOK_SECRET: whsec_test_minimal
+          TRUST_CRON_SECRET: test-cron-secret-min-32-characters
+          SELF_SCAN_URL: https://example.com
+          SELF_SCAN_ORG_ID: 00000000-0000-0000-0000-000000000000
+          
+      - name: Ensure .env.example is up to date
+        run: |
+          npm run env:example
+          if git diff --exit-code .env.example; then
+            echo "✅ .env.example is up to date"
+          else
+            echo "❌ .env.example is out of date. Run 'npm run env:example' and commit the changes."
+            exit 1
+          fi
+          
+      - name: Test with AI features enabled
+        run: npm run env:check
+        env:
+          NODE_ENV: test
+          NEXT_PUBLIC_SUPABASE_URL: https://test.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: test-service-key
+          STRIPE_SECRET_KEY: sk_test_minimal
+          STRIPE_WEBHOOK_SECRET: whsec_test_minimal
+          TRUST_CRON_SECRET: test-cron-secret-min-32-characters
+          SELF_SCAN_URL: https://example.com
+          SELF_SCAN_ORG_ID: 00000000-0000-0000-0000-000000000000
+          AI_SUMMARIZER_ENABLED: true
+          LLM_PROVIDER: openai
+          OPENAI_API_KEY: sk-test-key
+          
+      - name: Test with Redis rate limiting
+        run: npm run env:check
+        env:
+          NODE_ENV: test
+          NEXT_PUBLIC_SUPABASE_URL: https://test.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: test-service-key
+          STRIPE_SECRET_KEY: sk_test_minimal
+          STRIPE_WEBHOOK_SECRET: whsec_test_minimal
+          TRUST_CRON_SECRET: test-cron-secret-min-32-characters
+          SELF_SCAN_URL: https://example.com
+          SELF_SCAN_ORG_ID: 00000000-0000-0000-0000-000000000000
+          RATE_LIMIT_BACKEND: redis
+          UPSTASH_REDIS_REST_URL: https://test.upstash.io
+          UPSTASH_REDIS_REST_TOKEN: test-token

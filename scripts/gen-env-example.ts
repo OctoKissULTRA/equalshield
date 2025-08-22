@@ -1,4 +1,15 @@
-# 🛡️ EqualShield Environment Configuration
+#!/usr/bin/env npx tsx
+/**
+ * Generate .env.example from schema
+ * 
+ * Creates a clean template with all environment variables documented
+ * Usage: npm run env:example
+ */
+
+import { writeFileSync } from "fs";
+import * as path from "path";
+
+const TEMPLATE = `# 🛡️ EqualShield Environment Configuration
 # 
 # Copy this file to .env.local for development
 # For production, set these in your hosting provider's dashboard (Vercel, Railway, etc.)
@@ -178,3 +189,15 @@ CSP_REPORT_URI=
 # - OPENAI_API_KEY=your-key
 #
 # ============================================================================
+`;
+
+const outputPath = path.join(process.cwd(), ".env.example");
+writeFileSync(outputPath, TEMPLATE, "utf8");
+
+console.log("✅ Generated .env.example");
+console.log("\n📋 Next steps:");
+console.log("  1. Copy .env.example to .env.local");
+console.log("  2. Fill in your actual values");
+console.log("  3. Run 'npm run env:check' to validate");
+console.log("\n💡 Tip: Keep .env.example in git as documentation");
+console.log("       Never commit .env.local or files with real secrets");

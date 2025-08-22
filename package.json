@@ -20,6 +20,9 @@
     "test:legal-risk": "playwright test tests/legal-risk/",
     "scanner:demo": "npx tsx scripts/demo-scan.ts",
     "stripe:setup": "npx tsx scripts/setup-stripe-products.ts",
+    "env:check": "npx tsx scripts/check-env.ts",
+    "env:example": "npx tsx scripts/gen-env-example.ts",
+    "env:pull": "vercel env pull .env.local",
     "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
     "format": "prettier --write .",
     "type-check": "tsc --noEmit"
