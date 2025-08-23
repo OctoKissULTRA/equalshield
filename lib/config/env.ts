@@ -169,15 +169,10 @@ export function getEnv(): Env {
 }
 
 /**
- * Type-safe environment variable access
- * Use this instead of process.env directly
+ * Cached, validated environment configuration
+ * This is the primary export - use env.VARIABLE_NAME everywhere
  */
-export const env = new Proxy({} as Env, {
-  get: (_, prop: string) => {
-    const config = getEnv();
-    return config[prop as keyof Env];
-  }
-});
+export const env = getEnv();
 
 /**
  * Check if running in production

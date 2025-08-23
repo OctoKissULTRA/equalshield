@@ -82,3 +82,86 @@ jobs:
           RATE_LIMIT_BACKEND: redis
           UPSTASH_REDIS_REST_URL: https://test.upstash.io
           UPSTASH_REDIS_REST_TOKEN: test-token
+
+  env-drift-detection:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Extract required keys from .env.example
+        run: |
+          echo "📋 Extracting required environment variables..."
+          grep -E '^[A-Z0-9_]+=' .env.example | sed 's/=.*//' | sort > required-keys.txt
+          echo "Found $(wc -l < required-keys.txt) environment variables"
+          
+      - name: Check production environment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "⚠️ VERCEL_TOKEN not set, skipping production check"
+            exit 0
+          fi
+          
+          echo "🔍 Checking production environment variables..."
+          
+          # Get production env vars (keys only, not values)
+          vercel env ls --environment=production --token=$VERCEL_TOKEN 2>/dev/null | \
+            grep -E '^[A-Z0-9_]+' | \
+            awk '{print $1}' | \
+            sort > prod-keys.txt || true
+          
+          echo "📊 Environment drift report:"
+          echo "=========================="
+          
+          # Find missing in production
+          echo "❌ Missing in production:"
+          comm -23 required-keys.txt prod-keys.txt || true
+          
+          # Find extra in production (not in .env.example)
+          echo ""
+          echo "➕ Extra in production (not documented):"
+          comm -13 required-keys.txt prod-keys.txt || true
+          
+          # Count differences
+          MISSING=$(comm -23 required-keys.txt prod-keys.txt | wc -l)
+          EXTRA=$(comm -13 required-keys.txt prod-keys.txt | wc -l)
+          
+          if [ "$MISSING" -gt 0 ]; then
+            echo ""
+            echo "⚠️ Warning: $MISSING required variables missing in production"
+          fi
+          
+          if [ "$EXTRA" -gt 5 ]; then
+            echo ""
+            echo "ℹ️ Note: $EXTRA undocumented variables in production"
+          fi
+          
+      - name: Create drift report artifact
+        if: always()
+        run: |
+          echo "# Environment Drift Report" > drift-report.md
+          echo "Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> drift-report.md
+          echo "" >> drift-report.md
+          
+          if [ -f required-keys.txt ] && [ -f prod-keys.txt ]; then
+            echo "## Missing in Production" >> drift-report.md
+            comm -23 required-keys.txt prod-keys.txt >> drift-report.md || echo "None" >> drift-report.md
+            
+            echo "" >> drift-report.md
+            echo "## Extra in Production" >> drift-report.md
+            comm -13 required-keys.txt prod-keys.txt >> drift-report.md || echo "None" >> drift-report.md
+          else
+            echo "Could not generate drift report" >> drift-report.md
+          fi
+          
+      - name: Upload drift report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: env-drift-report
+          path: drift-report.md
+          retention-days: 7

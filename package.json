@@ -23,6 +23,8 @@
     "env:check": "npx tsx scripts/check-env.ts",
     "env:example": "npx tsx scripts/gen-env-example.ts",
     "env:pull": "vercel env pull .env.local",
+    "env:doctor": "bash scripts/env-doctor.sh",
+    "env:validate": "npm run env:check && npm run env:doctor",
     "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
     "format": "prettier --write .",
     "type-check": "tsc --noEmit"
